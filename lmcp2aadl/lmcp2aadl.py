@@ -1,21 +1,30 @@
 #!/usr/bin/python
-import xml.etree.ElementTree as ET
+#import xml.etree.ElementTree as ET
+import lxml.etree as ET
 import argparse as AP
 import sys
+import textwrap
 
 
+def strip_whitespace(comment):
+    return ' '.join(comment.split())
 
 #datatype class
 class Data_Type:
-    def __init__(self, name, fields):
+    def __init__(self, name, extends, fields):
         self.name = name
         self.fields = fields
+        self.extends = extends
+        self.comment = None
 
     def __str__(self):
         s = self.name + ': \n'
         for field in self.fields:
             s += '    ' + str(field) + ' \n'
         return s
+
+    def set_comment(self, text):
+        self.comment = strip_whitespace(text)
 
     __repr__ = __str__
 
@@ -24,6 +33,7 @@ class Field:
         self.name = name
         self.type = type
         self.is_array = False
+        self.comment = None
         self._translate_array_fields()
 
     def _translate_array_fields(field):
@@ -34,17 +44,67 @@ class Field:
     def __str__(self):
         return self.name + ' : ' + self.type
 
+    def set_comment(self, text):
+        self.comment = strip_whitespace(text)
+
     __repr__ = __str__
 
 class Enum:
     def __init__(self, name, vals):
         self.name = name
         self.vals = vals
+        self.comment = None
 
     def __str__(self):
         return self.name + ' : ' + str(self.vals)
 
+    def set_comment(self, text):
+        self.comment = strip_whitespace(text)
+
     __repr__ = __str__
+
+class XMLCollector(object):
+    def __init__(self):
+        self.structs = []
+        self.enums = []
+        self.cur_el = None
+        self.cur_fields = None
+        self.cur_entries = None
+        self.cur_comment = None
+
+    def start(self, tag, attrib):
+        if tag == "Struct" :
+            name = attrib['Name']
+            extends = None
+            if 'Extends' in attrib:
+                extends = attrib['Extends']
+            self.cur_fields = []
+            self.cur_el = Data_Type(name, extends, self.cur_fields) 
+            self.structs.append(self.cur_el)
+        if tag == "Field" :
+            name = attrib['Name']
+            field_type = attrib['Type']
+            self.cur_el = Field(name, field_type)
+            self.cur_fields.append(self.cur_el)
+        if tag == "Enum" :
+            name = attrib['Name']
+            self.cur_entries =[]
+            self.cur_el = Enum(name, self.cur_entries)
+            self.enums.append(self.cur_el)
+        if tag == "Entry":
+            name = attrib['Name']
+            self.cur_entries.append(name)
+        if self.cur_comment != None and self.cur_el != None:
+            self.cur_el.set_comment(self.cur_comment)
+
+    def end(self, tag):
+        self.cur_comment = None
+            
+    def comment(self, text):
+        self.cur_comment = text
+
+    def close(self):
+        return
 
 def main():
 
@@ -67,46 +127,18 @@ def main():
     out = open(out_file, 'w')
 
     #begin parsing xml
-    tree = ET.parse(in_file)
-    root = tree.getroot()
+    contents = open(in_file, 'r').read()
+    collector = XMLCollector()
+    parser = ET.XMLParser(target = collector)
+    result = ET.XML(contents, parser)
 
-
-    #parse structs
-    data_types = []
-    for struct_list in root.findall('StructList'):
-        for struct in struct_list.findall('Struct'):
-            parse_struct(struct, data_types)
-
-    #parse enums
-    enums = []
-    for enum_list in root.findall('EnumList'):
-        for enum in enum_list.findall('Enum'):
-            parse_enum(enum, enums)
-
-    for s in data_types:
+    for s in collector.structs:
         out.write(struct_to_aadl(s))
     
-    for e in enums:
+    for e in collector.enums:
         out.write(enum_to_aadl(e))
 
     out.close()
-
-
-
-def parse_struct(s, structs):
-    fields = []
-    for field in s.findall('Field'):
-        fields.append(Field(field.get('Name'), field.get('Type')))
-
-    structs.append(Data_Type(s.get('Name'), fields))
-
-
-def parse_enum(e, enums):
-    entries = {}
-    for entry in e.findall('Entry'):
-        entries[entry.get('Name')] = entry.get('Value')
-
-    enums.append(Enum(e.get('Name'), entries))
 
 
 def enum_to_aadl(enum):
@@ -114,11 +146,12 @@ def enum_to_aadl(enum):
     sep = ' '*4
     s = 'data ' + enum.name + ' extends Base_Types::Integer' + ret
     s += sep + 'properties' + ret
-    s += sep*2 + 'Enumerators => ('
-    delim = ""
+    s += sep*2 + 'Enumerators => (\n'
     for key in enum.vals:
-        s += delim + '"' + key + '"'
-        delim = ","
+        if enum.comment != None:
+            s+= to_aadl_comment(enum.comment, sep*3)
+        s += sep*3 + '"' + key + '",\n' 
+    s = s[:-2] #remove the last comma
     s += ');' + ret
     s += 'end ' + enum.name + ';' + ret*2
 
@@ -132,14 +165,24 @@ def struct_to_aadl(struct):
     s = 'data ' + struct.name + ret
     s += 'end ' + struct.name + ';' + ret*2
 
-    s += 'data implementation ' + struct.name + '.i' + ret
+    if struct.comment != None:
+        s+= to_aadl_comment(struct.comment, '')
+    s += 'data implementation ' + struct.name + '.i'
+    if struct.extends != None:
+        s+= ' extends ' + struct.extends + '.i'
+    s += ret
     s += sep + 'subcomponents' + ret
     for field in struct.fields:
+        if field.comment != None:
+            s += to_aadl_comment(field.comment, sep*2)
         s += sep*2 + field.name + ': data ' + field.type + '.i'
         if field.is_array:
             s += ' {Data_Representation => Array;}'
         s += ';' + ret
     s += 'end ' + struct.name + '.i;' + ret*2
     return s
+
+def to_aadl_comment(comment, indent):
+    return str(indent + ('\n' + indent + '--').join(textwrap.wrap('--' + comment))) + '\n'
 
 main()
