@@ -162,7 +162,10 @@ def enum_to_aadl(enum):
 def struct_to_aadl(struct):
     ret = '\n'   
     sep = ' '*4
-    s = 'data ' + struct.name + ret
+    s = 'data ' + struct.name
+    if struct.extends != None:
+        s+= ' extends ' + struct.extends
+    s+= ret
     s += 'end ' + struct.name + ';' + ret*2
 
     if struct.comment != None:
