@@ -61,8 +61,8 @@ class Field:
 def main():
 
     #parse all of the arguments
-    ap = AP.ArgumentParser(description='Converts an bitcode file for a serivce of the UxAS into an AADL file for the service')
-    ap.add_argument('in', metavar='input', type=str, help='the input bitcode file file')
+    ap = AP.ArgumentParser(description='takes an aadl file with process type definitions as input and outputs connections and subcomponent declarations')
+    ap.add_argument('in', metavar='input', type=str, help='the input AADL file')
     ap.add_argument('-out', metavar='output', type=str, help='the output AADL file')
 
 
