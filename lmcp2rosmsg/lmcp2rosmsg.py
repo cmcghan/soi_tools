@@ -1,5 +1,5 @@
 #!/usr/bin/python
-# Copyright © 2017 Government of the United States of America, as represented by the Secretary of the Air Force.
+# Copyright 2017 Government of the United States of America, as represented by the Secretary of the Air Force.
 # No copyright is claimed in the United States under Title 17, U. S. Code. All Other Rights Reserved.
 # Copyright 2017 University of Cincinnati. All rights reserved. See LICENSE.md file at:
 # https://github.com/cmcghan/soi_tools
@@ -12,7 +12,6 @@
 # for lxml, should be installed (except slt), but can install: (see: http://lxml.de/installation.html )
 # sudo apt-get install libxml2-dev libxslt-dev python-dev
 
-#import xml.etree.ElementTree as ET
 import lxml.etree as ET
 import argparse as AP
 import sys
@@ -46,9 +45,6 @@ class StructInfo: # StructInfo; basing vars off of LmcpGen/src/avtas/lmcp/lmcpge
             s += '    ' + str(field) + ' \n'
         return s
 
-    #def set_comment(self, text):
-    #    self.comment = strip_whitespace(text)
-        
     __repr__ = __str__
 
 class FieldInfo: # FieldInfo; basing vars off of LmcpGen/src/avtas/lmcp/lmcpgen/FieldInfo.java
@@ -73,11 +69,6 @@ class FieldInfo: # FieldInfo; basing vars off of LmcpGen/src/avtas/lmcp/lmcpgen/
     # for ROS .msg file, this stripping process is unnecessary
     def _translate_array_fields(field): # "field" is "self", here...
         if field.type.endswith('[]'):
-    #        print("type = %r" % field.type)
-    #        field.type = field.type[:-2]
-    #        #field.is_array = True;
-    #        field.length = 0 # new # unknown length
-    #        print("length = %r" % field.length)
             field.is_Array = True;
 
     def __str__(self):
@@ -91,9 +82,6 @@ class FieldInfo: # FieldInfo; basing vars off of LmcpGen/src/avtas/lmcp/lmcpgen/
         if self.comment != None:
             str_ret += ' (' + str(self.comment) + ')\n'
         return str_ret
-
-    #def set_comment(self, text):
-    #    self.comment = strip_whitespace(text)
 
     __repr__ = __str__
 
@@ -111,31 +99,6 @@ class EnumInfo: # EnumInfo; basing vars off of LmcpGen/src/avtas/lmcp/lmcpgen/En
         #    public String comment = "";
         #}
 
-    #def number_the_enums(): # need to give numbers to these for ROS msg stuff (setting constants)
-    #    any_not_numbered = False
-    #    # if following C++ convention for enumerated types:
-    #    if self.entries != None:
-    #        i = 0
-    #        for j in range(len(self.entries)):
-    #            if self.entries[j].value is None:
-    #                self.entries[j].value = i
-    #            else:
-    #                i = self.entries[j].value
-    #            i += 1
-    #
-    #    if self.entries != None:
-    #        for entry in self.entries:
-    #            if entry.value is None:
-    #                any_not_numbered = True
-    #        # way to handle this #1: number them
-    #        if any_not_numbered == True:
-    #            for i in range(len(self.entries)):
-    #                self.entries[i].value = i
-    #        # way to handle this #2: turn them into strings
-    #        if any_not_numbered == True:
-    #            for i in range(len(self.entries)):
-    #                self.entries[i].value = self.entries[i].name # give it the same value as the string name
-
     def __str__(self):
         str_ret = self.name
         if self.entries != None:
@@ -144,18 +107,10 @@ class EnumInfo: # EnumInfo; basing vars off of LmcpGen/src/avtas/lmcp/lmcpgen/En
             str_ret += ' (' + str(self.comment) + ')\n'
         return str_ret
 
-    #def set_comment(self, text):
-    #    self.comment = strip_whitespace(text)
-        
     __repr__ = __str__
 
 class EnumEntry: # new # EnumEntry; basing vars off of LmcpGen/src/avtas/lmcp/lmcpgen/EnumInfo.java
     def __init__(self, name, value, comment):
-        #public static class EnumEntry {
-        #    public String name = "";
-        #    public String value = "0";
-        #    public String comment = "";
-        #}
         self.name = name #public String name = "";
         # enumerated types can be strings (of themselves) if no value explicitly given!
         # see: http://en.cppreference.com/w/cpp/language/enum
@@ -163,10 +118,10 @@ class EnumEntry: # new # EnumEntry; basing vars off of LmcpGen/src/avtas/lmcp/lm
         self.is_Value = False # needed for ROS msg
         self.is_String = False # needed for ROS msg
         if value != None:
-            self.value = value # set to value-given
+            self.value = value # set to value-given # new # public String value = "0";
             self.is_Value = True # will assume is a uint8 here
         else:
-            self.value = name # if no value given, set it to the name string (for ROS)
+            self.value = name # if no value given, set it to the name string (for ROS) # new # public String value = "0";
             self.is_String = True
         self.comment = comment # new #public String comment = "";
         
@@ -178,33 +133,130 @@ class EnumEntry: # new # EnumEntry; basing vars off of LmcpGen/src/avtas/lmcp/lm
             str_ret += ' (' + str(self.comment) + ')'
         return str_ret
 
-    #def set_comment(self, text):
-    #    self.comment = strip_whitespace(text)
-        
     __repr__ = __str__
 
 # basing data types off of: LmcpGen/src/avtas/lmcp/lmcpgen/PythonMethods.java
 #private static String getPythonType(String type) {
 #if (type.toLowerCase().matches("(bool)")) {
 
-def grabPieceArray(type):
-    # [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
-#LXML bool -> ROS bool (-> Python bool)
-#LXML string -> ROS string (-> Python str)
-#LXML char -> ROS string (-> Python str)
-#LXML byte -> ROS uint8 (-> Python int)
-#LXML int64 -> ROS int64 (-> Python int)
-#LXML int32 -> ROS int32 (-> Python int)
-#LXML uint32 -> ROS uint32 (-> Python int)
-#LXML int16 -> ROS int16 (-> Python int)
-#LXML uint16 -> ROS uint16 (-> Python int)
-#LXML real32 -> ROS float32 (-> Python float)
-#LXML real64 -> ROS float64 (-> Python float)
+class XMLCollector_rosmsg(object): # MDMInfo; basing vars off of LmcpGen/src/avtas/lmcp/lmcpgen/MDMInfo.java
+    def __init__(self):
+        self.MDMseriesName = None # new #public String seriesName = "";
+        self.MDMnamespace = None # new #public String namespace = "";
+        self.MDMcomment = None # new #public String comment = "";
+        self.structs = [] #public StructInfo[] structs = new StructInfo[0];
+        self.enums = [] #public EnumInfo[] enums = new EnumInfo[0];
+        #new #public String mdmString = ""; #/** a string containing the contents of the MDM file */
+        self.MDMversion = 0 # new #public int version = 0;
+        self.seriesNameAsLong = 0 # new #public long seriesNameAsLong = 0;
+        
+        self.cur_str = None
+        self.cur_enum = None; self.cur_entry = None; self.cur_entries = None
+        self.cur_field = None; self.cur_fields = None
+        self.cur_comment = None
+        self.cur_data = None
+        
+    def start(self, tag, attrib):
+        if tag == "MDM" : # new
+            if self.cur_comment != None:
+                self.MDMcomment = self.cur_comment
+                self.cur_comment = None
+        if tag == "Struct" : # --> Field
+            name = attrib['Name']
+            extends = None
+            series = None # new
+            if 'Extends' in attrib:
+                extends = attrib['Extends']
+            if 'Series' in attrib: # new
+                series = attrib['Series']
+            [extendsfix,seriesfix] = extends_series_fixer(extends,series)
+            self.cur_fields = []
+            self.cur_str = StructInfo(name, extendsfix, seriesfix, self.cur_comment, self.cur_fields)
+            self.cur_comment = None # new
+        if tag == "Field" :
+            name = attrib['Name']
+            field_type = attrib['Type']
+            series = None
+            if 'Series' in attrib: # new
+                series = attrib['Series']
+            [field_typefix,seriesfix] = type_series_fixer(field_type,series)
+            defaultVal = None
+            units = None
+            if 'Default' in attrib:
+                defaultVal = attrib['Default']
+            if 'Units' in attrib: # new
+                units = attrib['Units']
+            self.cur_field = FieldInfo(name, field_typefix, seriesfix, self.cur_comment, defaultVal, units)
+            self.cur_comment = None # new
+            self.cur_fields.append(self.cur_field)
+        if tag == "Enum" : # --> Entry
+            name = attrib['Name']
+            self.cur_entries = []
+            self.cur_enum = EnumInfo(name, self.cur_entries, self.cur_comment)
+            self.cur_comment = None # new
+        if tag == "Entry":
+            name = attrib['Name']
+            value = None
+            if 'Value' in attrib:
+                value = attrib['Value']
+            self.cur_entry = EnumEntry(name,value,self.cur_comment)
+            self.cur_comment = None
+            self.cur_entries.append(self.cur_entry)
+        
+    def end(self, tag): # don't have data to go with tags until end-tag
+        if tag == "SeriesName" : # new
+            self.MDMseriesName = strip_whitespace(self.cur_data)
+        elif tag == "Namespace" : # new
+            self.MDMnamespace = strip_whitespace(self.cur_data)
+        elif tag == "Version" : # new
+            self.MDMversion = float(strip_whitespace(self.cur_data))
+        elif tag == "Struct" : # --> Field
+            self.cur_str.fields = self.cur_fields
+            self.structs.append(self.cur_str)
+        #elif tag == "Field" :
+            #pass
+        elif tag == "Enum" : # --> Entry
+            self.cur_enum.entries = self.cur_entries
+            self.enums.append(self.cur_enum)
+        #elif tag == "Entry":
+            #pass
+        self.cur_comment = None
+        self.cur_data = None # new
+        
+    def data(self, data): # new # see: http://lxml.de/parsing.html#the-target-parser-interface
+        self.cur_data = data
+        #print("Data: %r" % data) # note: this will give back unicode strings
 
-# ROS int8 -> LXML ??
-# ROS uint64 -> LXML ??
-# ROS time (secs/nsecs uint32) -> LXML ??
-# ROS duration (secs/nsecs uint32) -> LXML ??
+    def comment(self, text): # new # do NOT set a var in __init__ to same name with =None, will wipe out f(n)!!
+        self.cur_comment = strip_whitespace(text) # this turns unicode string to python string
+        
+    def close(self):
+        return
+
+def grabPieceArray(type):
+    # Call via:
+    # [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
+    #
+    # LXML   -> ROS     (-> Python)
+    #-------------------------------
+    # bool   -> bool    (-> bool  )
+    # string -> string  (-> str   )
+    # char   -> string  (-> str   )
+    # byte   -> uint8   (-> int   )
+    # int64  -> int64   (-> int   )
+    # int32  -> int32   (-> int   )
+    # uint32 -> uint32  (-> int   )
+    # int16  -> int16   (-> int   )
+    # uint16 -> uint16  (-> int   )
+    # real32 -> float32 (-> float )
+    # real64 -> float64 (-> float )
+
+    # LXML   -> ROS     (-> Python)
+    #-------------------------------
+    # ??     -> int8
+    # ??     -> uint64
+    # ??     -> time (secs/nsecs uint32)
+    # ??     -> duration (secs/nsecs uint32)
 
     lxml_to_ros_dict = {"bool": "bool", "string": "string", "char": "string",
                         "byte": "uint8", "int64": "int64", "int32": "int32",
@@ -246,6 +298,8 @@ def hasBasicRosType(type):
         return False
 
 def getRosType(type): # type assumed to be a string
+    # ROS uses same array [] or [#] as LXML, so could just find-replace portions of the string as-needed...
+    # except that this won't work if part of a created type includes these
     [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
     
     if (type_piece.lower() in lxml_to_ros_dict):
@@ -253,160 +307,34 @@ def getRosType(type): # type assumed to be a string
     else:
         holdstr = type_piece
 
-    ## ROS uses same array [] or [#] as LXML, so just find-replace portions of the string as-needed
-    #hold = type.replace("char","string",1)
-    #hold = hold.replace("byte","uint8",1)
-    #hold = hold.replace("real","float",1)
-    ## this won't work if part of a created type includes these, though...
     if typepre !=  '':
         return typepre+"_msgs/"+holdstr+type_array
     else:
         return holdstr+type_array
     
 
-def name_series_fixer(name,series)
-    
-    
-    return [fixedname,fixedseries]
+def type_series_fixer(type,series):
+    fixedtype = type
+    fixedseries = series
+    [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
+    if typepre != "":
+        if (series is None) or (series == ""):
+            fixedseries = typepre
+            fixedtype = type_piece + type_array
+            #print("DEBUG: type '%s' -> '%s', series '%s' -> '%s'" % (type,fixedtype,series,fixedseries))
+        elif series != typepre: # if gave a series and had series in the typepre but they don't match...
+            print("ERROR: mismatch in series given! (type='%s + / + %s', series='%s'." % (typepre,type_piece,series))
+            sys.exit(1)
+        else: # series and typepre match
+            fixedseries = series
+            fixedtype = type_piece + type_array
+            #print("DEBUG: type '%s' -> '%s', series '%s' -> '%s'" % (type,fixedtype,series,fixedseries))
+    return [fixedtype,fixedseries]
 
-def extends_series_fixer(extends,series)
-    
-    
+def extends_series_fixer(extends,series):
+    [fixedextends,fixedseries] = type_series_fixer(extends,series)
     return [fixedextends,fixedseries]
 
-class XMLCollector_rosmsg(object): # MDMInfo; basing vars off of LmcpGen/src/avtas/lmcp/lmcpgen/MDMInfo.java
-    def __init__(self):
-        self.MDMseriesName = None # new #public String seriesName = "";
-        self.MDMnamespace = None # new #public String namespace = "";
-        self.MDMcomment = None # new #public String comment = "";
-        self.structs = [] #public StructInfo[] structs = new StructInfo[0];
-        self.enums = [] #public EnumInfo[] enums = new EnumInfo[0];
-        #new #public String mdmString = ""; #/** a string containing the contents of the MDM file */
-        self.MDMversion = 0 # new #public int version = 0;
-        self.seriesNameAsLong = 0 # new #public long seriesNameAsLong = 0;
-        
-        #self.cur_el = None
-        self.cur_str = None # new
-        self.cur_enum = None # new
-        self.cur_field = None # new
-        self.cur_fields = None
-        self.cur_entry = None # new
-        self.cur_entries = None
-        self.cur_comment = None
-        self.cur_data = None # new
-        
-    def start(self, tag, attrib):
-        #print("Start:")
-        #print("tag: %r" % tag)
-        #print("attrib: %r " % dict(attrib))
-        if tag == "MDM" : # new
-            #print("MDM attrib: ")
-            #print(dict(attrib)) # see: http://lxml.de/tutorial.html
-            # text? tail?
-            if self.cur_comment != None:
-                self.MDMcomment = self.cur_comment
-                self.cur_comment = None
-                #print("MDM comment: %r" % self.MDMcomment)
-        if tag == "Struct" : # --> Field
-            #print("start Struct %r" % tag)
-            name = attrib['Name']
-            extends = None
-            series = None # new
-            if 'Extends' in attrib:
-                extends = attrib['Extends']
-            if 'Series' in attrib: # new
-                series = attrib['Series']
-            #[extends,series] = extends_series_fixer(extends,series)
-            self.cur_fields = []
-            #self.cur_el = Data_Type(name, extends, self.cur_fields)
-            self.cur_str = StructInfo(name, extends, series, self.cur_comment, self.cur_fields)
-            self.cur_comment = None # new
-            #print("StructInfo made")
-            #self.structs.append(self.cur_el)
-        if tag == "Field" :
-            #print("start Field %r" % tag)
-            name = attrib['Name']
-            field_type = attrib['Type']
-            series = None
-            if 'Series' in attrib: # new
-                series = attrib['Series']
-                #[name,series] = name_series_fixer(name,series)
-            defaultVal = None
-            units = None
-            if 'Default' in attrib:
-                defaultVal = attrib['Default']
-            if 'Units' in attrib: # new
-                units = attrib['Units']
-            #self.cur_el = Field(name, field_type)
-            self.cur_field = FieldInfo(name, field_type, series, self.cur_comment, defaultVal, units)
-            self.cur_comment = None # new
-            self.cur_fields.append(self.cur_field)
-            #print("FieldInfo made+appended")
-        if tag == "Enum" : # --> Entry
-            #print("start Enum %r" % tag)
-            name = attrib['Name']
-            self.cur_entries = []
-            #self.cur_el = Enum(name, self.cur_entries)
-            self.cur_enum = EnumInfo(name, self.cur_entries, self.cur_comment)
-            self.cur_comment = None # new
-            #print("EnumInfo made")
-            #self.enums.append(self.cur_el)
-        if tag == "Entry":
-            #print("start Entry %r" % tag)
-            name = attrib['Name']
-            value = None
-            if 'Value' in attrib:
-                value = attrib['Value']
-            self.cur_entry = EnumEntry(name,value,self.cur_comment)
-            self.cur_comment = None
-            self.cur_entries.append(self.cur_entry)
-            #print("Entry (made+)appended")
-        #if self.cur_comment != None and self.cur_el != None:
-        #    self.cur_el.set_comment(self.cur_comment)
-        #if self.cur_data != None and self.cur_el != None:
-        #    self.cur_el.set_data(self.cur_data)
-        
-    def end(self, tag): # don't have data to go with tags until end-tag
-        #print("End:")
-        #print("tag: %r" % tag)
-        if tag == "SeriesName" : # new
-            self.MDMseriesName = strip_whitespace(self.cur_data)
-            #print("self.seriesName = %r" % self.seriesName)
-        if tag == "Namespace" : # new
-            self.MDMnamespace = strip_whitespace(self.cur_data)
-            #print("self.namespace = %r" % self.namespace)
-        if tag == "Version" : # new
-            self.MDMversion = float(strip_whitespace(self.cur_data))
-            #print("self.version = %r" % self.version)
-        if tag == "Struct" : # --> Field
-            self.cur_str.fields = self.cur_fields
-            #self.cur_fields = []
-            self.structs.append(self.cur_str)
-            #print("end Struct %r" % tag)
-        #if tag == "Field" :
-            #print("end Field %r" % tag)
-        if tag == "Enum" : # --> Entry
-            #self.cur_el = Enum(name, self.cur_entries)
-            self.cur_enum.entries = self.cur_entries
-            #self.cur_entries = []
-            self.enums.append(self.cur_enum)
-            #print("end Enum %r" % tag)
-        #if tag == "Entry":
-            #print("end Entry %r" % tag)
-        self.cur_comment = None
-        self.cur_data = None # new
-        
-    def data(self, data): # new # see: http://lxml.de/parsing.html#the-target-parser-interface
-        self.cur_data = data
-        #print("Data: %r" % data) # note: this will give back unicode strings
-
-    def comment(self, text): # new # do NOT set a var in __init__ to same name with =None, will wipe out f(n)!!
-        self.cur_comment = strip_whitespace(text)
-        #print("Comment: %r" % text)
-        #print("Comment: %r" % self.cur_comment)
-
-    def close(self):
-        return
 
 def find_local_pkg_path(dirname_to_find):
     # reference: https://stackoverflow.com/a/2186565
@@ -432,7 +360,7 @@ def main():
     ap = AP.ArgumentParser(description='Converts an LMCP xml file into AADL datatypes')
     ap.add_argument('runtype', metavar='runoption', type=str, choices=["file","dir"], help='the option "dir" or "file" that decides the run (dir for directory as input_file)')
     ap.add_argument('input_file', metavar='input', type=str, help='the input LMCP xml file')
-    ap.add_argument('output_file', metavar='output', type=str, default=None, help='the output AADL file')
+    ap.add_argument('output_file', metavar='output', type=str, nargs='?', default=None, help='the output AADL file')
 
     args = ap.parse_args()
     args = vars(args)
@@ -444,7 +372,7 @@ def main():
     if in_file is None:
         print("Input filename not given. Exiting.")
         sys.exit(1)
-    if out_file is None:
+    if runtype != "dir" and out_file is None:
         print("Output filename not given. Exiting.")
         sys.exit(1)
     if in_file == out_file:
@@ -452,35 +380,30 @@ def main():
         sys.exit(1)
 
     if runtype == "dir": # chaining multiple things together
+        print("running over entire directory of xml files...")
         handle_all_files(in_file) # (xmldirstr)
     elif runtype == "file": # old/original way to do it
+        print("running over single xml file...")
         read_XML_MDMs_file_and_output_to_file(in_file,out_file)
     else:
         print("ERROR: Unknown input switch, exiting.")
         sys.exit(1)
 
 def parse_XML(in_file):
-    #begin parsing xml
     contents = open(in_file, 'r').read()
-    #print("contents: ")
-    #print(contents)
-    #print("\n")
     collector = XMLCollector_rosmsg()
     parser = ET.XMLParser(target = collector)
-    result = ET.XML(contents, parser)
-    #result = ET.parse(in_file, parser) # alt.
-    
-    #return [contents,collector,parse,result]
+    result = ET.XML(contents, parser) # changes the parser(=collector) internally
     return collector
 
 def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None):
     if in_file is None:
         print("Input filename not given. Exiting.")
         sys.exit(1)
-    if out_file is None:
-        print("Output filename not given. Will only write to individual files.")
+    if out_file is not None:
+        print("Output filename is given. Will also write to given file, not just individual files.")
     if in_file == out_file:
-        print('the input file and output file must be different names')
+        print('The input file and output file must be different names')
         sys.exit(1)
 
     collector = parse_XML(in_file)
@@ -497,8 +420,12 @@ def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None):
     # output filenames for each struct is determined from collector.structs.name, collector.structs.series
     rospkgname = str(collector.MDMnamespace).lower() + "_msgs"
     #rospkgname = str(collector.seriesName).lower() + "_msgs" # this won't handle the "namespaces" well
-    # use collector.MDMcomment for short README.txt document in repo
-    os.system('mkdir -p %s' % str(rospkgname))
+    
+    # make directory if it doesn't already exist:
+    #os.system('mkdir -p %s' % str(rospkgname))
+    os.system('mkdir -p %s/msg' % str(rospkgname)) # for correct ROS pkg structure
+    
+    # use collector.MDMcomment for short README.txt document in repo:
     readme_str = "##Series Name\n" + str(collector.MDMseriesName) + '\n'
     readme_str += "##Namespace\n" + rospkgname + '\n'
     readme_str += "##Version\n" + str(collector.MDMversion) + '\n'
@@ -508,6 +435,7 @@ def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None):
     out.write(readme_str)
     out.close()
     
+    # get the .msg file content made (string structstr) and then written to disk (at out_file)
     if out_file is not None:
         out = open(out_file,'w')
     # output filenames for each struct is determined from collector.structs.name, collector.structs.series
@@ -523,8 +451,6 @@ def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None):
         #if dependencies != []:
         #    print("%s/%s has external dependencies: %r" % (rospkgname,str(s.name),dependencies))
     
-    #for e in collector.enums:
-    #    out.write(enum_to_rosmsg(e))
     if out_file is not None:
         out.close()
 
@@ -560,7 +486,7 @@ def enum_to_rosmsg(enum):
     return [s,enumtype]
 
 
-#isLocalEnumType(struct.fields[i].type,enums)
+#indexLocalEnumType(struct.fields[i].type,enums)
 def indexLocalEnumType(type,enums_list):
     index = -1
     # find if enum if in this series
@@ -576,8 +502,6 @@ def indexLocalEnumType(type,enums_list):
 #isOtherStructType(struct.fields[i].type,struct)
 #def isOtherStructType(type,struct):
 #    boolAns = False
-#    
-#    
 #    
 #    return boolAns
 
@@ -596,7 +520,7 @@ def handle_all_files(xmldirstr):
     # figure out what dependencies they have on each other
     unordered_list = []
     for filename in matches_found:
-        c = parse_XML(in_file) # c as in collector
+        c = parse_XML(filename) # c as in collector
         dependencies = get_all_xml_file_deps(c.MDMseriesName,c.MDMnamespace,c.structs,c.enums)
         if dependencies == None:
             sys.exit(0)
@@ -605,6 +529,7 @@ def handle_all_files(xmldirstr):
     # then get them 'sorted' in the order in which dependencies need to be handled
     i = 0
     sorted_list = []
+    deps_added = []
     requires_sorting = []
     for i in range(len(unordered_list)):
         if unordered_list[i][2] == []: # if dependencies == []
@@ -612,9 +537,9 @@ def handle_all_files(xmldirstr):
             deps_added.append(unordered_list[i][1])
         else: # add to requires-sorting part
             requires_sorting.append(unordered_list[i])
-    print("sorted_list: %r" % sorted_list)
-    print("deps_added: %r" % deps_added)
-    print("requires_sorting: %r" % requires_sorting)
+    #print("sorted_list: %r" % sorted_list)
+    #print("deps_added: %r" % deps_added)
+    #print("requires_sorting: %r" % requires_sorting)
     i = 0
     prev = None
     holdsorting = None
@@ -652,35 +577,38 @@ def handle_all_files(xmldirstr):
                 deps_added.append(requires_sorting[i][1])
                 requires_sorting[i] = None # "zero out" entry
         i = i+1
+    #print("requires_sorting: %r" % requires_sorting)
+    #print("sorted_list: %r" % sorted_list)
     
     # now that everything's sorted in an order that'll  be able to handle all deps, get each file handled!
     for i in range(len(sorted_list)):
+        #print("---\nDealing with %s..." % sorted_list[i][0])
         in_file = sorted_list[i][0]
         read_XML_MDMs_file_and_output_to_file(in_file,out_file=None)
+        #print("Done dealing with %s...\n---" % sorted_list[i][0])
     # after this, should be done!
 
 def get_all_xml_file_deps(MDMseriesName,MDMnamespace,structs_list,enums_list):
     dependencies = []
     for s in structs_list:
-        dependencies = get_struct_deps(s,MDMseriesName,MDMnamespace,enums_list,dependencies=[])
+        dependencies = get_struct_deps(s,MDMseriesName,MDMnamespace,enums_list,dependencies)
         if dependencies is None:
             print("DEBUG: problem with finding dependencies for %s!"  % s.name)
             return None
     return dependencies
 
+# get_struct_deps() is modified from struct_to_rosmsg (removes unnecessary additional computation)
 def get_struct_deps(struct,MDMseriesName,MDMnamespace,enums_list,dependencies=[]):
     # struct.{name,extends,series,comment,fields}
     # fields.{name,comment,type,defaultVal,units}
     
+    # get dependencies in struct if has an extends
     if struct.extends != None:
-        #s += ret
-        if struct.series != None:
-            holdss = str(struct.series).lower() + "_msgs/"
-        else:
-            holdss = ""
-        
+        #
+        # now, need to find and add all parts of other struct (we are 'extending' from) here:
+        #
         # find other struct
-        if holdss == "" or holdss == str(str(MDMnamespace)+"_msgs/") or holdss == str(str(MDMseriesName).lower()+"_msgs/"): # then in this series (same MDM file)
+        if struct.series == None or str(struct.series) == "" or str(struct.series).lower() == str(MDMseriesName).lower(): # then in this series (same MDM file)
             # (1) find and grab from other struct if in this series
             # other struct will show an external dependency when we get to it, will be added then
             # we only really care about global pkg deps per-XML MDMs file
@@ -688,48 +616,33 @@ def get_struct_deps(struct,MDMseriesName,MDMnamespace,enums_list,dependencies=[]
         else: # then this must be from some other file
             # (2a) open and read file if in an entirely different series
             #print("*** need to grab this from another file ***")
-            if struct.series != None:
-                dep = str(struct.series).lower() + "_msgs"
-                dep_fixed = find_local_pkg_path(dep)
-                if dep_fixed != "":
-                    pass
-                else: # problem with finding directory
-                    return None
-            else: # series not given, need to figure out what external file this came from
-                [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(struct.extends)
-                #ii = struct.extends.find("/")
-                if typepre != None:
-                    dep = str(typepre).lower() + "_msgs"
-                    dep_fixed = find_local_pkg_path(dep)
-                    if dep_fixed != "":
-                        pass
-                    else: # problem with finding directory
-                        return None
-                else: # this should not happen...
-                    print("DEBUG: error, name %s 'extends' (%s) should include '/' in this circumstance, failing up..." % (struct.name,struct.extends))
-                    return None
+            # in get_struct_deps, don't need to actually open that file currently, just save what it's looking for...
+            dep = str(struct.series).lower() + "_msgs"
+
             # (2b) add to pkg msg dependency list for pkg if needed other pkg
             if not(dep in dependencies):
                 dependencies.append(dep)
             #print("dependencies for %s %s: %r" % (rospkgname,struct.name,dependencies))
-    
+
+    # get dependencies in fields
     for i in range(len(struct.fields)):
         # trying to get pkg/series to go with type...
         if not hasBasicRosType(struct.fields[i].type):
             enumindex = indexLocalEnumType(struct.fields[i].type,enums_list)
             if enumindex != -1: # then need to find and add enum here
-                pass
+                pass # enums are never external
             else:
-                if (struct.fields[i].series != None) and (struct.fields[i].series != ""): # ...this should be enough, have to give remote series
-                    dep = str(struct.fields[i].series).lower() + "_msgs/"
-                    s += dep
+                # need to give correct Series before type
+                if (struct.fields[i].series != None) and (struct.fields[i].series != "") and str(struct.fields[i].series).lower() != str(MDMseriesName).lower(): # then in this series (same MDM file)
+                    #print("otherstruct in different _msgs")
+                    dep = str(struct.fields[i].series).lower() + "_msgs"
                     if not(dep in dependencies):
                         dependencies.append(dep)
                 else: # assuming is inside current local set... probably a good assumption
                     pass
         else:
             pass
-    
+
     return dependencies # None is returned if there is a problem, [] is returned if no external deps
 
 def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,enums_list,dependencies=[],level=0):
@@ -763,7 +676,7 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
     # -> 
     #
     # <Field Name="AltitudeType" Type="AltitudeType" Default="MSL" />
-    # -> "Field Default" is the initial value to set this to... except that ROS doesn't support this
+    # -> 'Field Default' of "MSL" is the initial value to set this to... except that ROS doesn't support this
     #    (...does 0mq??)
     #
     
@@ -776,7 +689,8 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
     
     ret = "\n"
     
-    outfile = "./" + rospkgname + "/" + struct.name + ".msg"
+    #outfile = "./" + rospkgname + "/" + struct.name + ".msg"
+    outfile = "./" + rospkgname + "/msg/" + struct.name + ".msg" # for correct ROS pkg structure
     
     s = "# Struct: " + struct.name + ret
     if struct.comment != None:
@@ -784,16 +698,17 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
     if struct.extends != None:
         #s += ret
         if struct.series != None:
-            holdss = str(struct.series).lower() + "_msgs/"
+            s += "# Extends: " + str(struct.series).lower() + "_msgs/" + struct.extends + ret
         else:
-            holdss = ""
-        s += "# Extends: " + holdss + struct.extends + ret # need to find and add all parts of other struct here ***WIP***
+            s += "# Extends: " + str(MDMseriesName).lower() + "_msgs/" + struct.extends + ret
         s += "# ----------------------------------------" + ret
         s += "# ----------------------------------------" + ret
         
-        extendshandled = 0
+        #
+        # now, need to find and add all parts of other struct (we are 'extending' from) here:
+        #
         # find other struct
-        if holdss == "" or holdss == str(str(MDMnamespace)+"_msgs/") or holdss == str(str(MDMseriesName).lower()+"_msgs/"): # then in this series (same MDM file)
+        if struct.series == None or str(struct.series) == "" or str(struct.series).lower() == str(MDMseriesName).lower(): # then in this series (same MDM file)
             # (1) find and grab from other struct if in this series
             holdit_local_names = [str(xx.name) for xx in structs_list]
             #print("struct.name = %r" % holdit_local_names)
@@ -807,34 +722,21 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
                     return ["",dependencies]
                 else: # have the info we need, so copy the info into this struct file:
                     s += extendsstr #+ ret
-                    extendshandled = 1
             else:
                 print("DEBUG: for %s. the struct '%s' was not found in the same file, yet should have been existent!" % (struct.name,struct.extends))
-        if extendshandled != 1: # then this must be from some other file
+                return ["",dependencies]
+        else: # then this must be from some other file
             # (2a) open and read file if in an entirely different series
             #print("*** need to grab this from another file ***")
-            if struct.series != None:
-                dep = str(struct.series).lower() + "_msgs"
-                dep_fixed = find_local_pkg_path(dep)
-                if dep_fixed != "":
-                    msgfilenamestr = "./" + dep_fixed + "/" + str(struct.extends) + ".msg"
-                    extendshandled = 1
-                else: # problem with finding directory
-                    return ["",dependencies]
-            else: # series not given, need to figure out what external file this came from
-                [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(struct.extends)
-                #ii = struct.extends.find("/")
-                if typepre != None:
-                    dep = str(typepre).lower() + "_msgs"
-                    dep_fixed = find_local_pkg_path(dep)
-                    if dep_fixed != "":
-                        msgfilenamestr = "./" + dep_fixed + "/" + type_piece + ".msg"
-                        extendshandled = 1
-                    else: # problem with finding directory
-                        return ["",dependencies]
-                else: # this should not happen...
-                    print("DEBUG: error, name %s 'extends' (%s) should include '/' in this circumstance, failing up..." % (struct.name,struct.extends))
-                    return [s,dependencies]
+            dep = str(struct.series).lower() + "_msgs"
+            dep_fixed = find_local_pkg_path(dep)
+            if dep_fixed != "":
+                #msgfilenamestr = "./" + dep_fixed + "/" + str(struct.extends) + ".msg"
+                msgfilenamestr = "./" + dep_fixed + "/msg/" + str(struct.extends) + ".msg" # for correct ROS pkg structure
+                extendshandled = 1
+            else: # problem with finding directory
+                print("Problem is with struct %s.\n--" % struct.name)
+                return ["",dependencies]
             # now that we have the info we need, copy the info into this struct file:
             msgfile_in = open(msgfilenamestr,'r')
             s += msgfile_in.read()
@@ -843,8 +745,6 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
             if not(dep in dependencies):
                 dependencies.append(dep)
             #print("dependencies for %s %s: %r" % (rospkgname,struct.name,dependencies))
-        #if extendshandled != 1: # should never happen
-        #    print("We screwed up something here, couldn't include the extends: %s in %s." % (struct.extends,outfile))
         s += "# ----------------------------------------" + ret
     
     for i in range(len(struct.fields)):
@@ -864,19 +764,17 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
                 s += "# ---" + ret
                 s += enumtype + type_array + " " + struct.fields[i].name
             else:
-                if True: #isOtherStructType(struct.fields[i].type,struct) == True: # need to give correct Series before type
-                    if (struct.fields[i].series != None) and (struct.fields[i].series != ""): # ...this should be enough, have to give remote series
-                        #print("otherstruct in different _msgs")
-                        dep = str(struct.fields[i].series).lower() + "_msgs/"
-                        s += dep
-                        if not(dep in dependencies):
-                            dependencies.append(dep)
-                    else: # assuming is inside current local set... probably a good assumption
-                        #print("otherstruct in same series")
-                        #s += rospkgname + "/"
-                        s += str(MDMseriesName).lower() + "_msgs/"
-                else:
-                    print("DEBUG: I don't know what type this is: %s in %s." % (struct.fields[i].type,outfile))
+                # need to give correct Series before type
+                if (struct.fields[i].series != None) and (struct.fields[i].series != ""): # ...this should be enough, have to give remote series # for ROS msgs, don't have to write local pkg type, but is a good idea
+                    #print("otherstruct in different _msgs")
+                    dep = str(struct.fields[i].series).lower() + "_msgs"
+                    s += dep + "/"
+                    if not(dep in dependencies):
+                        dependencies.append(dep)
+                else: # assuming is inside current local set... probably a good assumption
+                    #print("otherstruct in same series")
+                    #s += rospkgname + "/"
+                    s += str(MDMseriesName).lower() + "_msgs/"
                 s += getRosType(struct.fields[i].type) + " " + struct.fields[i].name
         else:
             s += getRosType(struct.fields[i].type) + " " + struct.fields[i].name
