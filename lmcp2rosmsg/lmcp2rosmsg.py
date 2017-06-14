@@ -12,11 +12,126 @@
 # for lxml, should be installed (except slt), but can install: (see: http://lxml.de/installation.html )
 # sudo apt-get install libxml2-dev libxslt-dev python-dev
 
+""" .msg files create + catkin_make okay! example calls:
+-- downloaded to ~/github_pulls
+as in, 'mkdir -p ~/github_pulls && cd ~/github_pulls && git clone https://github.com/cmcghan/soi_tools.git
+then, 'cd ~/github_pulls/soi_tools/lmcp2rosmsg'
+then, can call via:
+./lmcp2rosmsg.py dir /home/cmcghan/UxAS_cmcghan/OpenUxAS/mdms
+-or- (in single-file debug mode, that likely won't create things effectively...)
+./lmcp2rosmsg.py file /home/cmcghan/UxAS_cmcghan/OpenUxAS/mdms/CMASI.xml test_output.rosmsg_out
+./lmcp2rosmsg.py file /home/cmcghan/UxAS_cmcghan/OpenUxAS/mdms/IMPACT.xml test_output.rosmsg_out
+...etc.
+-- this is assuming that the 'OpenUxAS' is located under the directory specified as shown above
+-- this creates a catkni-like work structure under (in this example) ~/github_pulls/soi_tools/lmcp2rosmsg
+as, in, ~/github_pulls/soi_tools/lmcp2rosmsg/catkin_lmcp/src
+-- make this an actual workspace via:
+'cd ~/github_pulls/soi_tools/lmcp2rosmsg/catkin_lmcp/src; catkin_init_workspace; cd ..; catkin_make'
+"""
+
+""" main() function is the starting point
+-- handle_all_files() figures out all the dependencies and then reads in and handles each mdms XML file in order
+---- read_XML_MDMs_file_and_output_to_file() is called upon by this (in a for loop) and calls the file read-in stuff to grab the XML content in a usable form (via parse_XML(), storing it in an XMLCollector_rosmsg class) and then calls struct_to_rosmsg() in turn
+
+-- class XMLCollector_rosmsg is the main "class" called to hold all data
+---- this depends on the StructInfo, FieldInfo, EnumInfo (that depends in turn on EnumEntry) classes
+
+-- struct_to_rosmsg() is the meat of this file, creating the string that gets written out to each .msg file
+---- enums_to_rosmsg() does the same for enumerated types, is a subfunction of struct_to_rosmsg()
+"""
+
 import lxml.etree as ET
 import argparse as AP
 import sys
 import textwrap
 import os
+
+def get_lxml_to_ros_dict():
+    # Call via:
+    # lxml_to_ros_dict = get_lxml_to_ros_dict()
+    #
+    # LXML   -> ROS     (-> Python)
+    #-------------------------------
+    # bool   -> bool    (-> bool  )
+    # string -> string  (-> str   )
+    # char   -> string  (-> str   )
+    # byte   -> uint8   (-> int   )
+    # int64  -> int64   (-> int   )
+    # int32  -> int32   (-> int   )
+    # uint32 -> uint32  (-> int   )
+    # int16  -> int16   (-> int   )
+    # uint16 -> uint16  (-> int   )
+    # real32 -> float32 (-> float )
+    # real64 -> float64 (-> float )
+
+    # LXML   -> ROS     (-> Python)
+    #-------------------------------
+    # ??     -> int8
+    # ??     -> uint64
+    # ??     -> time (secs/nsecs uint32)
+    # ??     -> duration (secs/nsecs uint32)
+
+    lxml_to_ros_dict = {"bool": "bool", "string": "string", "char": "string",
+                        "byte": "uint8", "int64": "int64", "int32": "int32",
+                        "uint32": "uint32", "int16": "int16", "uint16": "uint16",
+                        "real32": "float32", "real64": "float64"}
+    return lxml_to_ros_dict
+
+# see also: http://wiki.ros.org/msg#Building_.msg_Files
+def grabPieceArray(type):
+    # Call via:
+    # [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
+    #
+    
+    lxml_to_ros_dict = get_lxml_to_ros_dict()
+    
+    # get last / location
+    ii = 0; previi = 0
+    typehold = str(type)
+    while ii != -1:
+        previi = ii
+        ii = typehold.find("/")
+        typehold = typehold[ii+1:len(typehold)]
+    # split at "/", leaving out "/"
+    if previi == 0: # no split required
+        typepre = ''
+        typestr = str(type)
+    else: # need to split
+        typepre = type[0:previi]
+        typestr = type[previi+1:len(type)] # removes "/"
+    
+    # get array portion if exists, split out array if exists
+    holdindex = typestr.find("[")
+    if holdindex != -1:
+        type_piece = typestr[0:holdindex]
+        type_array = typestr[holdindex:len(typestr)]
+    else:
+        type_piece = typestr
+        type_array = ""
+    
+    return [typepre,type_piece,type_array]
+
+def type_series_fixer(type,series):
+    fixedtype = type
+    fixedseries = series
+    [typepre,type_piece,type_array] = grabPieceArray(type)
+    if typepre != "":
+        if (series is None) or (series == ""):
+            fixedseries = typepre
+            fixedtype = type_piece + type_array
+            #print("DEBUG: type '%s' -> '%s', series '%s' -> '%s'" % (type,fixedtype,series,fixedseries))
+        elif series != typepre: # if gave a series and had series in the typepre but they don't match...
+            print("ERROR: mismatch in series given! (type='%s + / + %s', series='%s'." % (typepre,type_piece,series))
+            sys.exit(1)
+        else: # series and typepre match
+            fixedseries = series
+            fixedtype = type_piece + type_array
+            #print("DEBUG: type '%s' -> '%s', series '%s' -> '%s'" % (type,fixedtype,series,fixedseries))
+    return [fixedtype,fixedseries]
+
+def extends_series_fixer(extends,series):
+    [fixedextends,fixedseries] = type_series_fixer(extends,series)
+    return [fixedextends,fixedseries]
 
 def strip_whitespace(comment):
     if comment != None:
@@ -233,64 +348,9 @@ class XMLCollector_rosmsg(object): # MDMInfo; basing vars off of LmcpGen/src/avt
     def close(self):
         return
 
-def grabPieceArray(type):
-    # Call via:
-    # [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
-    #
-    # LXML   -> ROS     (-> Python)
-    #-------------------------------
-    # bool   -> bool    (-> bool  )
-    # string -> string  (-> str   )
-    # char   -> string  (-> str   )
-    # byte   -> uint8   (-> int   )
-    # int64  -> int64   (-> int   )
-    # int32  -> int32   (-> int   )
-    # uint32 -> uint32  (-> int   )
-    # int16  -> int16   (-> int   )
-    # uint16 -> uint16  (-> int   )
-    # real32 -> float32 (-> float )
-    # real64 -> float64 (-> float )
-
-    # LXML   -> ROS     (-> Python)
-    #-------------------------------
-    # ??     -> int8
-    # ??     -> uint64
-    # ??     -> time (secs/nsecs uint32)
-    # ??     -> duration (secs/nsecs uint32)
-
-    lxml_to_ros_dict = {"bool": "bool", "string": "string", "char": "string",
-                        "byte": "uint8", "int64": "int64", "int32": "int32",
-                        "uint32": "uint32", "int16": "int16", "uint16": "uint16",
-                        "real32": "float32", "real64": "float64"}
-    
-    # get last / location
-    ii = 0; previi = 0
-    typehold = str(type)
-    while ii != -1:
-        previi = ii
-        ii = typehold.find("/")
-        typehold = typehold[ii+1:len(typehold)]
-    # split at "/", leaving out "/"
-    if previi == 0: # no split required
-        typepre = ''
-        typestr = str(type)
-    else: # need to split
-        typepre = type[0:previi]
-        typestr = type[previi+1:len(type)] # removes "/"
-    
-    # get array portion if exists, split out array if exists
-    holdindex = typestr.find("[")
-    if holdindex != -1:
-        type_piece = typestr[0:holdindex]
-        type_array = typestr[holdindex:len(typestr)]
-    else:
-        type_piece = typestr
-        type_array = ""
-    
-    return [typepre,type_piece,type_array,lxml_to_ros_dict]
-
 def hasBasicRosType(type):
-    [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
+    [typepre,type_piece,type_array] = grabPieceArray(type)
+    lxml_to_ros_dict = get_lxml_to_ros_dict()
     
     if (type_piece.lower() in lxml_to_ros_dict):
         return True
@@ -300,7 +360,8 @@ def hasBasicRosType(type):
 def getRosType(type): # type assumed to be a string
     # ROS uses same array [] or [#] as LXML, so could just find-replace portions of the string as-needed...
     # except that this won't work if part of a created type includes these
-    [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
+    [typepre,type_piece,type_array] = grabPieceArray(type)
+    lxml_to_ros_dict = get_lxml_to_ros_dict()
     
     if (type_piece.lower() in lxml_to_ros_dict):
         holdstr = lxml_to_ros_dict[type_piece.lower()]
@@ -311,191 +372,14 @@ def getRosType(type): # type assumed to be a string
         return typepre+"_msgs/"+holdstr+type_array
     else:
         return holdstr+type_array
-    
-
-def type_series_fixer(type,series):
-    fixedtype = type
-    fixedseries = series
-    [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
-    if typepre != "":
-        if (series is None) or (series == ""):
-            fixedseries = typepre
-            fixedtype = type_piece + type_array
-            #print("DEBUG: type '%s' -> '%s', series '%s' -> '%s'" % (type,fixedtype,series,fixedseries))
-        elif series != typepre: # if gave a series and had series in the typepre but they don't match...
-            print("ERROR: mismatch in series given! (type='%s + / + %s', series='%s'." % (typepre,type_piece,series))
-            sys.exit(1)
-        else: # series and typepre match
-            fixedseries = series
-            fixedtype = type_piece + type_array
-            #print("DEBUG: type '%s' -> '%s', series '%s' -> '%s'" % (type,fixedtype,series,fixedseries))
-    return [fixedtype,fixedseries]
-
-def extends_series_fixer(extends,series):
-    [fixedextends,fixedseries] = type_series_fixer(extends,series)
-    return [fixedextends,fixedseries]
-
-
-def find_local_pkg_path(dirname_to_find):
-    # reference: https://stackoverflow.com/a/2186565
-    import fnmatch
-    import os
-    matches_found = []
-    for localroot, dirnames, filenames in os.walk('./'):
-        for dirname in fnmatch.filter(dirnames, dirname_to_find):
-            matches_found.append(os.path.join(localroot, dirname))
-    
-    #print("%s , %s" % (dirname_to_find, matches_found))
-    if matches_found == []:
-        print("DEBUG: error, found no matching subpackage for '%s'!" % dirname_to_find)
-        return ""
-    elif len(matches_found) == 1:
-        return matches_found[0] # should only match the once
-    else:
-        print("DEBUG: error, found multiple subpackages for '%s'! (%r)" % (dirname_to_find,matches_found))
-        return ""
-
-def main():
-    #parse all of the arguments
-    ap = AP.ArgumentParser(description='Converts an LMCP xml file into AADL datatypes')
-    ap.add_argument('runtype', metavar='runoption', type=str, choices=["file","dir"], help='the option "dir" or "file" that decides the run (dir for directory as input_file)')
-    ap.add_argument('input_file', metavar='input', type=str, help='the input LMCP xml file')
-    ap.add_argument('output_file', metavar='output', type=str, nargs='?', default=None, help='the output AADL file')
-
-    args = ap.parse_args()
-    args = vars(args)
-
-    runtype = args.get('runtype')
-    in_file = args.get('input_file')
-    out_file = args.get('output_file')
-    
-    if in_file is None:
-        print("Input filename not given. Exiting.")
-        sys.exit(1)
-    if runtype != "dir" and out_file is None:
-        print("Output filename not given. Exiting.")
-        sys.exit(1)
-    if in_file == out_file:
-        print('the input file and output file must be different names')
-        sys.exit(1)
-
-    if runtype == "dir": # chaining multiple things together
-        print("running over entire directory of xml files...")
-        handle_all_files(in_file) # (xmldirstr)
-    elif runtype == "file": # old/original way to do it
-        print("running over single xml file...")
-        read_XML_MDMs_file_and_output_to_file(in_file,out_file)
-    else:
-        print("ERROR: Unknown input switch, exiting.")
-        sys.exit(1)
-
-def parse_XML(in_file):
-    contents = open(in_file, 'r').read()
-    collector = XMLCollector_rosmsg()
-    parser = ET.XMLParser(target = collector)
-    result = ET.XML(contents, parser) # changes the parser(=collector) internally
-    return collector
-
-def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None):
-    if in_file is None:
-        print("Input filename not given. Exiting.")
-        sys.exit(1)
-    if out_file is not None:
-        print("Output filename is given. Will also write to given file, not just individual files.")
-    if in_file == out_file:
-        print('The input file and output file must be different names')
-        sys.exit(1)
-
-    collector = parse_XML(in_file)
-    
-    # *** FOR DEBUGGING: ***
-    #print("seriesName = %r" % collector.MDMseriesName)
-    #print("namespace = %r" % collector.MDMnamespace)
-    #print("version = %r" % collector.MDMversion)
-    #print("comment = %r" % collector.MDMcomment)
-    #print("structs = %r" % collector.structs)
-    #print("enums = %r" % collector.enums)
-    
-    # package name is detemrined by collector.MDMseriesName, collector.MDMnamespace
-    # output filenames for each struct is determined from collector.structs.name, collector.structs.series
-    rospkgname = str(collector.MDMnamespace).lower() + "_msgs"
-    #rospkgname = str(collector.seriesName).lower() + "_msgs" # this won't handle the "namespaces" well
-    
-    # make directory if it doesn't already exist:
-    #os.system('mkdir -p %s' % str(rospkgname))
-    os.system('mkdir -p %s/msg' % str(rospkgname)) # for correct ROS pkg structure
-    
-    # use collector.MDMcomment for short README.txt document in repo:
-    readme_str = "##Series Name\n" + str(collector.MDMseriesName) + '\n'
-    readme_str += "##Namespace\n" + rospkgname + '\n'
-    readme_str += "##Version\n" + str(collector.MDMversion) + '\n'
-    readme_str += "<hr>\n"
-    readme_str += str(collector.MDMcomment) + '\n'
-    out = open("./" + rospkgname + "/README.md", 'w')
-    out.write(readme_str)
-    out.close()
-    
-    # get the .msg file content made (string structstr) and then written to disk (at out_file)
-    if out_file is not None:
-        out = open(out_file,'w')
-    # output filenames for each struct is determined from collector.structs.name, collector.structs.series
-    for s in collector.structs: # struct_to_rosmsg will internally write to individual files, but below line...
-        [structstr,dependencies] = struct_to_rosmsg(s,collector.MDMseriesName,collector.MDMnamespace,rospkgname,collector.structs,collector.enums)
-        if out_file is not None:
-            out.write(structstr) # ...(also) writes to full file
-            out.write("\n")
-            out.write("# ----------------------------------------\n")
-            out.write("# ----------------------------------------\n")
-            out.write("# ----------------------------------------\n")
-            out.write("\n")
-        #if dependencies != []:
-        #    print("%s/%s has external dependencies: %r" % (rospkgname,str(s.name),dependencies))
-    
-    if out_file is not None:
-        out.close()
-
-def enum_to_rosmsg(enum):
-    #
-    # note: we are going to have to handle all the enums first, because
-    # they need to be written into the corresponding .msg files at-need
-    #
-    ret = '\n'
-    
-    # EnumInfo
-    # {name , comment , entries}
-    s = "# Enum: " + enum.name + ret
-    #print("Enum name = %s" % enum.name)
-    if enum.comment != None:
-        s += "# " + enum.comment.replace("\n","\n# ") + ret
-    for entry in enum.entries:
-        # EnumEntry
-        #{name , is_Value , is_String , value , comment}
-        if entry.comment != None:
-            s += "# " + entry.comment.replace("\n","\n# ") + ret
-        if entry.is_Value:
-            s += "uint8 "
-            enumtype="unit8" # should be consistent for all entries
-        elif entry.is_String:
-            s += "string "
-            enumtype="string" # should be consistent for all entries
-        else:
-            s += "# ERROR: (--None--) "
-            print("DEBUG: unknown enum entry type %s in enum %s" % (entry.name,enum.name))
-        s += entry.name + "=" + entry.value + ret
-    #print("enum s = %s" % s)
-    return [s,enumtype]
-
 
 #indexLocalEnumType(struct.fields[i].type,enums)
 def indexLocalEnumType(type,enums_list):
     index = -1
     # find if enum if in this series
     holdit_enum_names = [str(xx.name) for xx in enums_list]
-    #print(holdit_enum_names)
-    [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(type)
-    #print("type: '%s' , type_piece: '%s'" % (str(type),str(type_piece)))
-    if str(type_piece) in holdit_enum_names:
-        # get index
+    [typepre,type_piece,type_array] = grabPieceArray(type)
+    if str(type_piece) in holdit_enum_names: # then get index
         index = holdit_enum_names.index(str(type_piece))
     return index
 
@@ -504,6 +388,63 @@ def indexLocalEnumType(type,enums_list):
 #    boolAns = False
 #    
 #    return boolAns
+
+# get_struct_deps() is modified from struct_to_rosmsg (removes unnecessary additional computation)
+def get_struct_deps(struct,MDMseriesName,MDMnamespace,enums_list,dependencies=[]):
+    # struct.{name,extends,series,comment,fields}
+    # fields.{name,comment,type,defaultVal,units}
+    
+    # get dependencies in struct if has an extends
+    if struct.extends != None:
+        #
+        # now, need to find and add all parts of other struct (we are 'extending' from) here:
+        #
+        # find other struct
+        if struct.series == None or str(struct.series) == "" or str(struct.series).lower() == str(MDMseriesName).lower(): # then in this series (same MDM file)
+            # (1) find and grab from other struct if in this series
+            # other struct will show an external dependency when we get to it, will be added then
+            # we only really care about global pkg deps per-XML MDMs file
+            pass
+        else: # then this must be from some other file
+            # (2a) open and read file if in an entirely different series
+            #print("*** need to grab this from another file ***")
+            # in get_struct_deps, don't need to actually open that file currently, just save what it's looking for...
+            dep = str(struct.series).lower() + "_msgs"
+
+            # (2b) add to pkg msg dependency list for pkg if needed other pkg
+            if not(dep in dependencies):
+                dependencies.append(dep)
+            #print("dependencies for %s %s: %r" % (rospkgname,struct.name,dependencies))
+
+    # get dependencies in fields
+    for i in range(len(struct.fields)):
+        # trying to get pkg/series to go with type...
+        if not hasBasicRosType(struct.fields[i].type):
+            enumindex = indexLocalEnumType(struct.fields[i].type,enums_list)
+            if enumindex != -1: # then need to find and add enum here
+                pass # enums are never external
+            else:
+                # need to give correct Series before type
+                if (struct.fields[i].series != None) and (struct.fields[i].series != "") and str(struct.fields[i].series).lower() != str(MDMseriesName).lower(): # then in this series (same MDM file)
+                    #print("otherstruct in different _msgs")
+                    dep = str(struct.fields[i].series).lower() + "_msgs"
+                    if not(dep in dependencies):
+                        dependencies.append(dep)
+                else: # assuming is inside current local set... probably a good assumption
+                    pass
+        else:
+            pass
+
+    return dependencies # None is returned if there is a problem, [] is returned if no external deps
+
+def get_all_xml_file_deps(MDMseriesName,MDMnamespace,structs_list,enums_list):
+    dependencies = []
+    for s in structs_list:
+        dependencies = get_struct_deps(s,MDMseriesName,MDMnamespace,enums_list,dependencies)
+        if dependencies is None:
+            print("DEBUG: problem with finding dependencies for %s!"  % s.name)
+            return None
+    return dependencies
 
 def handle_all_files(xmldirstr):
     # get all XML MDM filenames+paths together
@@ -528,7 +469,7 @@ def handle_all_files(xmldirstr):
     
     # then get them 'sorted' in the order in which dependencies need to be handled
     i = 0
-    sorted_list = []
+    sorted_list = [] # entries are: [filename,str(c.MDMseriesName).lower() + "_msgs",dependencies]
     deps_added = []
     requires_sorting = []
     for i in range(len(unordered_list)):
@@ -581,71 +522,342 @@ def handle_all_files(xmldirstr):
     #print("sorted_list: %r" % sorted_list)
     
     # now that everything's sorted in an order that'll  be able to handle all deps, get each file handled!
+    
+    pkg_structdata_dict = {}
+    # start by reading in all info from files, so that if we need to handle stuff, we can...
+    for i in range(len(sorted_list)):
+        in_file = sorted_list[i][0]
+        collector = None
+        collector = parse_XML(in_file)
+        pkg_structdata_dict.update({str(sorted_list[i][1]): collector}) # {'name_of_pkg_msgs' : collector_struct}
+    
+    # now that everything's sorted in an order that'll  be able to handle all deps, get each file handled!
     for i in range(len(sorted_list)):
         #print("---\nDealing with %s..." % sorted_list[i][0])
         in_file = sorted_list[i][0]
-        read_XML_MDMs_file_and_output_to_file(in_file,out_file=None)
+        read_XML_MDMs_file_and_output_to_file(in_file,None,pkg_structdata_dict) # out_file = None
         #print("Done dealing with %s...\n---" % sorted_list[i][0])
     # after this, should be done!
 
-def get_all_xml_file_deps(MDMseriesName,MDMnamespace,structs_list,enums_list):
-    dependencies = []
-    for s in structs_list:
-        dependencies = get_struct_deps(s,MDMseriesName,MDMnamespace,enums_list,dependencies)
-        if dependencies is None:
-            print("DEBUG: problem with finding dependencies for %s!"  % s.name)
-            return None
-    return dependencies
+def main():
+    #parse all of the arguments
+    ap = AP.ArgumentParser(description='Converts an LMCP xml file into AADL datatypes')
+    ap.add_argument('runtype', metavar='runoption', type=str, choices=["file","dir"], help='the option "dir" or "file" that decides the run (dir for directory as input_file)')
+    ap.add_argument('input_file', metavar='input', type=str, help='the input LMCP xml file')
+    ap.add_argument('output_file', metavar='output', type=str, nargs='?', default=None, help='the output AADL file')
 
-# get_struct_deps() is modified from struct_to_rosmsg (removes unnecessary additional computation)
-def get_struct_deps(struct,MDMseriesName,MDMnamespace,enums_list,dependencies=[]):
-    # struct.{name,extends,series,comment,fields}
-    # fields.{name,comment,type,defaultVal,units}
+    args = ap.parse_args()
+    args = vars(args)
+
+    runtype = args.get('runtype')
+    in_file = args.get('input_file')
+    out_file = args.get('output_file')
     
-    # get dependencies in struct if has an extends
-    if struct.extends != None:
-        #
-        # now, need to find and add all parts of other struct (we are 'extending' from) here:
-        #
-        # find other struct
-        if struct.series == None or str(struct.series) == "" or str(struct.series).lower() == str(MDMseriesName).lower(): # then in this series (same MDM file)
-            # (1) find and grab from other struct if in this series
-            # other struct will show an external dependency when we get to it, will be added then
-            # we only really care about global pkg deps per-XML MDMs file
-            pass
-        else: # then this must be from some other file
-            # (2a) open and read file if in an entirely different series
-            #print("*** need to grab this from another file ***")
-            # in get_struct_deps, don't need to actually open that file currently, just save what it's looking for...
-            dep = str(struct.series).lower() + "_msgs"
+    if in_file is None:
+        print("Input filename not given. Exiting.")
+        sys.exit(1)
+    if runtype != "dir" and out_file is None:
+        print("Output filename not given. Exiting.")
+        sys.exit(1)
+    if in_file == out_file:
+        print('the input file and output file must be different names')
+        sys.exit(1)
 
-            # (2b) add to pkg msg dependency list for pkg if needed other pkg
-            if not(dep in dependencies):
-                dependencies.append(dep)
-            #print("dependencies for %s %s: %r" % (rospkgname,struct.name,dependencies))
+    if runtype == "dir": # chaining multiple things together
+        print("running over entire directory of xml files...")
+        handle_all_files(in_file) # (xmldirstr)
+    elif runtype == "file": # old/original way to do it
+        print("running over single xml file...")
+        read_XML_MDMs_file_and_output_to_file(in_file,out_file)
+    else:
+        print("ERROR: Unknown input switch, exiting.")
+        sys.exit(1)
 
-    # get dependencies in fields
-    for i in range(len(struct.fields)):
-        # trying to get pkg/series to go with type...
-        if not hasBasicRosType(struct.fields[i].type):
-            enumindex = indexLocalEnumType(struct.fields[i].type,enums_list)
-            if enumindex != -1: # then need to find and add enum here
-                pass # enums are never external
-            else:
-                # need to give correct Series before type
-                if (struct.fields[i].series != None) and (struct.fields[i].series != "") and str(struct.fields[i].series).lower() != str(MDMseriesName).lower(): # then in this series (same MDM file)
-                    #print("otherstruct in different _msgs")
-                    dep = str(struct.fields[i].series).lower() + "_msgs"
-                    if not(dep in dependencies):
-                        dependencies.append(dep)
-                else: # assuming is inside current local set... probably a good assumption
-                    pass
+def parse_XML(in_file):
+    contents = open(in_file, 'r').read()
+    collector = XMLCollector_rosmsg()
+    parser = ET.XMLParser(target = collector)
+    result = ET.XML(contents, parser) # changes the parser(=collector) internally
+    return collector
+
+# ref: https://en.wikipedia.org/wiki/Code_injection#Shell_injection
+# could use Python 3's shlex.quote(s) instead, see: https://docs.python.org/3/library/shlex.html#shlex.quote
+# and: https://stackoverflow.com/questions/34898430/escaping-for-proper-shell-injection-prevention
+import string
+def found_unsafe_inputs_in_str(str_to_check):
+    status = -1
+    # look for what shouldn't be there:
+    # from: https://hg.python.org/cpython/file/63354d11a741/Lib/shlex.py#l278
+    #_--> find_unsafe = re.compile(r'[^\w@%+=:,./-]', re.ASCII).search
+    # flag if find any of: [^\w@%+=:,./-]
+    # from Wikipedia: https://en.wikipedia.org/wiki/Code_injection#Shell_injection
+    # flag if find any of: ;|`$&><
+    #for ch in [";","|","`","$","&",">","<"."'",'"',"[","^","\\","w","@","%","+","=",":",",",".","/","-","]"]:
+    for ch in [";","|","`","$","&",">","<","'",'"',"[","^","\\","w","@","%","+","=",":",",","-","]"]:
+        if str_to_check.find(ch) != -1:
+            status = 1
+            print("DEBUG: found char '%s'" % ch)
+            return 1
+    # make sure what is there is only in the allowed set:
+    for ch in str_to_check:
+        if not(ch in str(string.letters + string.whitespace + string.digits + "_./")): # allow underscore in names and . / for directory parsing
+            status = 1
+            print("DEBUG: unsafe char '%s'" % ch)
+            return 1
+    return status
+
+
+def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None,pkg_structdata_dict=None):
+    if in_file is None:
+        print("Input filename not given. Exiting.")
+        sys.exit(1)
+    if out_file is not None:
+        print("Output filename is given. Will also write to given file, not just individual files.")
+    if in_file == out_file:
+        print('The input file and output file must be different names')
+        sys.exit(1)
+
+    collector = parse_XML(in_file) # read into pkg_structdata_dict before, but we don't know the _msg pkg we're working on yet, just the filename to read
+    
+    # *** FOR DEBUGGING: ***
+    #print("seriesName = %r" % collector.MDMseriesName)
+    #print("namespace = %r" % collector.MDMnamespace)
+    #print("version = %r" % collector.MDMversion)
+    #print("comment = %r" % collector.MDMcomment)
+    #print("structs = %r" % collector.structs)
+    #print("enums = %r" % collector.enums)
+    
+    # package name is detemrined by collector.MDMseriesName, collector.MDMnamespace
+    # output filenames for each struct is determined from collector.structs.name, collector.structs.series
+    rospkgname = str(collector.MDMnamespace).lower() + "/" + str(collector.MDMseriesName).lower() + "_msgs"
+    #rospkgname = str(collector.seriesName).lower() + "_msgs" # this won't handle the "namespaces" well
+    
+    # might want to look into using subprocess.call() instead of os.system(), as per:
+    # -- https://stackoverflow.com/questions/89228/calling-an-external-command-in-python
+    # -- https://docs.python.org/2/library/subprocess.html
+    
+    # given catkin workspace directory (run at same level as script?)
+    catkinws_dir = 'catkin_lmcp' # may get this from "out_file" later instead of using it as a debug output of (last) XMl file written to disk, but for now use this
+    
+    # remove build and devel dirs from the catkin workspace directory: # runs multiple times in this f(n)...
+    if found_unsafe_inputs_in_str(str(catkinws_dir)) == -1:
+        print("removing 'build' and 'devel' directories from catkin workspace '%s'..." % catkinws_dir)
+        os.system('rm -rf %s/build' % str(catkinws_dir))
+        os.system('rm -rf %s/devel' % str(catkinws_dir))
+    pre_dir = str(catkinws_dir) + "/src/"
+    rospkgname = pre_dir + rospkgname # modify this to be a subdir of the catkin_workspace
+    
+    print("------------------\n*** Starting package creation of %s ***" % rospkgname)
+    
+    # creating subdirectory 'X_msgs/msg'...
+    #os.system('mkdir -p %s' % str(rospkgname))
+    if found_unsafe_inputs_in_str(str(rospkgname)) == -1:
+        print("creating subdirectory '%s/msg'..." % str(rospkgname))
+        os.system('mkdir -p %s/msg' % str(rospkgname)) # for correct ROS pkg structure
+    else:
+        print("Unsafe rospkgname string '%s' created from file=%s. Exiting before run." % (str(rospkgname),in_file))
+        sys.exit(1)
+    
+    # make CMakeLists.txt and package.xml that is correct for the catkin pkg
+    dependencies = get_all_xml_file_deps(collector.MDMseriesName,collector.MDMnamespace,collector.structs,collector.enums)
+    pkgmsgstr = str(str(collector.MDMseriesName).lower()+"_msgs")
+    pkgdepsstr = " ".join(dependencies)
+    pkgdepstofilestr = "\n  ".join(dependencies)
+    if found_unsafe_inputs_in_str(str(rospkgname)) == -1 and found_unsafe_inputs_in_str(pkgmsgstr) == -1 and found_unsafe_inputs_in_str(pkgdepsstr) == -1:
+        # if the directory already exists, remove it, then create the package again anew (so that we have a clean run)
+        if os.path.isdir(rospkgname): # if (full)path is a directory that already exists...
+            if (" " in rospkgname) or (" / " in rospkgname) or ("/ " in rospkgname) or (".." in rospkgname) or (rospkgname == "/"):
+                # warning! unsafe! don't do the rm command on blatantly root-level system directory or something that might be (already) bumping up up extra levels!
+                print("Warning, rospkgname='%s', not going through with the rm command!")
+                sys.exit(1)
+            else: # should be (relatively) safe to remove the directory
+                print("removing path: '%s'" % str(rospkgname))
+                os.system('rm -rf ./%s' % str(rospkgname)) # remove the directory
+        
+        # create the ROS package
+        #os.system('cd %s/.. && catkin_create_pkg %s %s' % (str(rospkgname),pkgmsgstr,pkgdepsstr))
+        # easier to modify the CMakeLLists.txt and package.xml without giving it package dependency inputs that change the file
+        print("creating package '%s' in directory '%s'..." %(str(rospkgname),pkgmsgstr))
+        os.system('cd ./%s/.. && catkin_create_pkg %s' % (str(rospkgname),pkgmsgstr))
+        # then we need to modify the two files:
+
+        # (re-)creating subdirectory 'X_msgs/msg'...
+        #os.system('mkdir -p %s' % str(rospkgname))
+        if found_unsafe_inputs_in_str(str(rospkgname)) == -1:
+            print("creating subdirectory '%s/msg'..." % str(rospkgname))
+            os.system('mkdir -p %s/msg' % str(rospkgname)) # for correct ROS pkg structure
         else:
-            pass
+            print("Unsafe rospkgname string '%s' created from file=%s. Exiting before run." % (str(rospkgname),in_file))
+            sys.exit(1)
+        
+        #-- fixing CMakeLists.txt
+        
+        oldstrtofind = []
+        newstrtoreplacewith = []
+        
+        oldstrtofind.append("find_package(catkin REQUIRED)")
+        newstrtoreplacewith.append("find_package(catkin REQUIRED COMPONENTS\n  roscpp\n  rospy\n  #rosjava # not necessary to include rosjava, just install ros-kinetic-rosjava and it will automatically run genjava\n  std_msgs\n  %s\n  message_generation\n)" % pkgdepstofilestr)
 
-    return dependencies # None is returned if there is a problem, [] is returned if no external deps
+        holdstrstructnames = ""
+        for s in collector.structs:
+            holdstrstructnames += "  " + s.name + ".msg\n"
+        oldstrtofind.append("# add_message_files(\n#   FILES\n#   Message1.msg\n#   Message2.msg\n# )")
+        newstrtoreplacewith.append("add_message_files(\n  FILES\n%s)" % holdstrstructnames) # '%s' instead of '  %s\n' because already has preceding '  ' and trailing '\n'
+        
+        oldstrtofind.append("# generate_messages(\n#   DEPENDENCIES\n#   std_msgs  # Or other packages containing msgs\n# )")
+        newstrtoreplacewith.append("generate_messages(\n  DEPENDENCIES\n  std_msgs  # Or other packages containing msgs\n  %s\n)" % pkgdepstofilestr)
+        
+        holdstrstructnamespluspre = ""
+        for dep in dependencies:
+            holdstrstructnamespluspre += "  CATKIN_DEPENDS " + dep + "\n"
+        oldstrtofind.append("catkin_package(\n#  INCLUDE_DIRS include\n#  LIBRARIES %s\n#  CATKIN_DEPENDS other_catkin_pkg\n#  DEPENDS system_lib\n)" % pkgmsgstr)
+        newstrtoreplacewith.append("catkin_package(\n#  INCLUDE_DIRS include\n#  LIBRARIES %s\n  CATKIN_DEPENDS message_runtime\n%s#  DEPENDS system_lib\n)" % (pkgmsgstr,holdstrstructnamespluspre)) # '%s' instead of '  %s\n' because already has preceding '  ' and trailing '\n'
 
-def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,enums_list,dependencies=[],level=0):
+        #print("./" + str(rospkgname) + "/CMakeLists.txt")
+        CMakeLists_in = open("./" + str(rospkgname) + "/CMakeLists.txt","r")
+        filedata = CMakeLists_in.read()
+        CMakeLists_in.close()
+        #print("\n-----before------\n" + filedata + "\n----------------\n")
+        fixedfiledata_str = filedata
+        for i in range(len(oldstrtofind)): # now, perform find-replace ops on the CMakeLists.txt file!
+            fixedfiledata_str = fixedfiledata_str.replace(oldstrtofind[i],newstrtoreplacewith[i])
+        #print("\n-----after------\n" + fixedfiledata_str + "\n----------------\n")
+        CMakefile_out = open("./" + str(rospkgname) + "/CMakeLists.txt", 'w')
+        CMakefile_out.write(fixedfiledata_str)
+        CMakefile_out.close()
+        print("Finished modification of file: CMakeLists.txt")
+        
+        #-- fixing package.xml
+        
+        oldstrtofind = []
+        newstrtoreplacewith = []
+
+        holdstrbuildpkgdeps = ""
+        holdsrunpkgdeps = ""
+        for dep in dependencies:
+            holdstrbuildpkgdeps += "  <build_depend>" + dep + "</build_depend>\n"
+            holdsrunpkgdeps += "  <run_depend>" + dep + "</run_depend>\n"
+        oldstrtofind.append("  <buildtool_depend>catkin</buildtool_depend>\n")
+        newstrtoreplacewith.append("  <buildtool_depend>catkin</buildtool_depend>\n  <build_depend>message_generation</build_depend>\n  <build_depend>std_msgs</build_depend>\n%s  <run_depend>message_runtime</run_depend>\n  <run_depend>std_msgs</run_depend>\n%s" % (holdstrbuildpkgdeps,holdsrunpkgdeps))
+
+        #print("./" + str(rospkgname) + "/package.xml")
+        packagexml_in = open("./" + str(rospkgname) + "/package.xml","r")
+        filedata = packagexml_in.read()
+        packagexml_in.close()
+        #print("\n-----before------\n" + filedata + "\n----------------\n")
+        fixedfiledata_str = filedata
+        for i in range(len(oldstrtofind)): # now, perform find-replace ops on the package.xml file!
+            fixedfiledata_str = fixedfiledata_str.replace(oldstrtofind[i],newstrtoreplacewith[i])
+        #print("\n-----after------\n" + fixedfiledata_str + "\n----------------\n")
+        packagexml_out = open("./" + str(rospkgname) + "/package.xml", 'w')
+        packagexml_out.write(fixedfiledata_str)
+        packagexml_out.close()
+        print("Finished modification of file: package.xml")
+        
+    else:
+        print("Unsafe MDMnamespace string '%s' or unsafe dependencies '%s' or directory '%s' created from file=%s. Exiting before run." % (pkgmsgstr,pkgdepsstr,rospkgname,in_file))
+        sys.exit(1)
+    
+    print("Beginning .msg file creation for %s_msg..." % str(collector.MDMseriesName).lower())
+    
+    # use collector.MDMcomment for short README.txt document in repo:
+    readme_str = "##Series Name\n" + str(collector.MDMseriesName) + '\n'
+    #readme_str += "##Namespace\n" + rospkgname + '\n'
+    readme_str += "##Namespace\n" + str(collector.MDMnamespace) + '\n'
+    readme_str += "##Version\n" + str(collector.MDMversion) + '\n'
+    readme_str += "<hr>\n"
+    readme_str += str(collector.MDMcomment) + '\n'
+    out = open("./" + rospkgname + "/README.md", 'w')
+    out.write(readme_str)
+    out.close()
+    
+    # get the .msg file content made (string structstr) and then written to disk (at out_file)
+    if out_file is not None:
+        out = open(out_file,'w')
+    # output filenames for each struct is determined from collector.structs.name, collector.structs.series
+    for s in collector.structs: # struct_to_rosmsg will internally write to individual files, but below line...
+        [structstr,dependencies] = struct_to_rosmsg(s,collector.MDMseriesName,collector.MDMnamespace,rospkgname,pre_dir,collector.structs,collector.enums,pkg_structdata_dict)
+        if out_file is not None:
+            out.write(structstr) # ...(also) writes to full file
+            out.write("\n")
+            out.write("# ----------------------------------------\n")
+            out.write("# ----------------------------------------\n")
+            out.write("# ----------------------------------------\n")
+            out.write("\n")
+        #if dependencies != []:
+        #    print("%s/%s has external dependencies: %r" % (rospkgname,str(s.name),dependencies))
+    
+    if out_file is not None:
+        out.close()
+        
+    print(".msg file creation for %s_msg completed!" % str(collector.MDMseriesName).lower())
+
+# see also: http://answers.ros.org/question/9427/enum-in-msg/
+# and: http://wiki.ros.org/msg#Constants
+def enum_to_rosmsg(enum):
+    #
+    # note: we are going to have to handle all the enums first, because
+    # they need to be written into the corresponding .msg files at-need
+    #
+    ret = '\n'
+    
+    s_linelist = []
+    
+    # EnumInfo
+    # {name , comment , entries}
+    #s = "# Enum: " + enum.name + ret
+    s_linelist.append("# Enum: " + enum.name)
+    #print("Enum name = %s" % enum.name)
+    if enum.comment != None:
+        #s += "# " + enum.comment.replace("\n","\n# ") + ret
+        s_linelist.append("# " + enum.comment.replace("\n","\n# "))
+    for entry in enum.entries:
+        shold = ""
+        # EnumEntry
+        #{name , is_Value , is_String , value , comment}
+        if entry.comment != None:
+            #s += "# " + entry.comment.replace("\n","\n# ") + ret
+            s_linelist.append("# " + entry.comment.replace("\n","\n# "))
+        if entry.is_Value:
+            #s += "uint8 "
+            shold += "uint8 "
+            enumtype="uint8" # should be consistent for all entries
+        elif entry.is_String:
+            #s += "string "
+            shold += "string "
+            enumtype="string" # should be consistent for all entries
+        else:
+            #s += "# ERROR: (--None--) "
+            shold += "# ERROR: (--None--) "
+            print("DEBUG: unknown enum entry type %s in enum %s" % (entry.name,enum.name))
+        #s += entry.name + "=" + entry.value + ret
+        shold += entry.name + "=" + entry.value
+        s_linelist.append(shold)
+    #print("enum s = %s" % s)
+    #return [s,enumtype]
+    return [s_linelist,enumtype]
+
+def find_local_pkg_path(dirname_to_find,dir_to_look_in='./'):
+    # reference: https://stackoverflow.com/a/2186565
+    import fnmatch
+    import os
+    matches_found = []
+    for localroot, dirnames, filenames in os.walk(dir_to_look_in):
+        for dirname in fnmatch.filter(dirnames, dirname_to_find):
+            matches_found.append(os.path.join(localroot, dirname))
+    
+    #print("%s , %s" % (dirname_to_find, matches_found))
+    if matches_found == []:
+        print("DEBUG: error, found no matching subpackage for '%s'!" % dirname_to_find)
+        return ""
+    elif len(matches_found) == 1:
+        return matches_found[0] # should only match the once
+    else:
+        print("DEBUG: error, found multiple subpackages for '%s'! (%r)" % (dirname_to_find,matches_found))
+        return ""
+
+# see also: http://docs.ros.org/kinetic/api/calibration_msgs/html/msg/JointStateCalibrationPattern.html
+def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,pre_dir,structs_list,enums_list,pkg_structdata_dict=None,dependencies=[],level=0):
     #
     # note: "extends" is making a new class with ': public extended_class',
     # so the data names and datatypes are handled at the same level in UxAS
@@ -690,7 +902,7 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
     ret = "\n"
     
     #outfile = "./" + rospkgname + "/" + struct.name + ".msg"
-    outfile = "./" + rospkgname + "/msg/" + struct.name + ".msg" # for correct ROS pkg structure
+    outfile = "./" + rospkgname + "/msg/" + str(struct.name) + ".msg" # for correct ROS pkg structure
     
     s = "# Struct: " + struct.name + ret
     if struct.comment != None:
@@ -707,7 +919,7 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
         #
         # now, need to find and add all parts of other struct (we are 'extending' from) here:
         #
-        # find other struct
+        # find other struct -- note: because we are adding "extends" first, we shouldn't be "doubling up" on things like enums below (enums below will check this piece since it's already in the string s
         if struct.series == None or str(struct.series) == "" or str(struct.series).lower() == str(MDMseriesName).lower(): # then in this series (same MDM file)
             # (1) find and grab from other struct if in this series
             holdit_local_names = [str(xx.name) for xx in structs_list]
@@ -716,7 +928,7 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
                 # get index
                 ii = holdit_local_names.index(struct.extends)
                 # get file contents; yes, this can get us into trouble if we go down too many levels
-                [extendsstr,dependencies] = struct_to_rosmsg(structs_list[ii],MDMseriesName,MDMnamespace,rospkgname,structs_list,enums_list,dependencies,level+1)
+                [extendsstr,dependencies] = struct_to_rosmsg(structs_list[ii],MDMseriesName,MDMnamespace,rospkgname,pre_dir,structs_list,enums_list,pkg_structdata_dict,dependencies,level+1)
                 if extendsstr == "":
                     print("Trace: %r , name: %s, extends: %s" % (level,struct.name,struct.extends))
                     return ["",dependencies]
@@ -729,7 +941,7 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
             # (2a) open and read file if in an entirely different series
             #print("*** need to grab this from another file ***")
             dep = str(struct.series).lower() + "_msgs"
-            dep_fixed = find_local_pkg_path(dep)
+            dep_fixed = find_local_pkg_path(dep,pre_dir) # look from the correct prefix dir where the files are being created
             if dep_fixed != "":
                 #msgfilenamestr = "./" + dep_fixed + "/" + str(struct.extends) + ".msg"
                 msgfilenamestr = "./" + dep_fixed + "/msg/" + str(struct.extends) + ".msg" # for correct ROS pkg structure
@@ -754,16 +966,42 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
         # trying to get pkg/series to go with type...
         if not hasBasicRosType(struct.fields[i].type):
             enumindex = indexLocalEnumType(struct.fields[i].type,enums_list)
+            seriesdep_enumindex = -1
+            pkgname_lookingfor = ""
+            if (enumindex == -1): # no point in looking further if found it locally
+                if struct.fields[i].series == None or struct.fields[i].series == "":
+                    pkgname_lookingfor = str(MDMseriesName).lower()+'_msgs'
+                else:
+                    pkgname_lookingfor = str(struct.fields[i].series).lower()+'_msgs'
+                seriesdep_enumslist = pkg_structdata_dict[pkgname_lookingfor].enums
+                seriesdep_enumindex = indexLocalEnumType(struct.fields[i].type,seriesdep_enumslist)
+            #if (str(struct.name) == 'LoiterAction'):
+            #    print("*** DEBUG *** struct.fields[i].type = %s, struct.fields[i].series = %s , pkgname_lookingfor = %s , enumindex = %d , seriesdep_enumindex = %d" % (struct.fields[i].type,struct.fields[i].series,pkgname_lookingfor,enumindex,seriesdep_enumindex))
             #print("type '%s', enumindex = %d" % (struct.fields[i].type,enumindex))
-            if enumindex != -1: # then need to find and add enum here
-                [enumentriesstr,enumtype] = enum_to_rosmsg(enums_list[enumindex])
-                [typepre,type_piece,type_array,lxml_to_ros_dict] = grabPieceArray(struct.fields[i].type)
+            if enumindex != -1 or seriesdep_enumindex != -1: # then need to grab and add enum here
+                if enumindex != -1:
+                    [enumentriesstr_linelist,enumtype] = enum_to_rosmsg(enums_list[enumindex])
+                if seriesdep_enumindex != -1:
+                    [enumentriesstr_linelist,enumtype] = enum_to_rosmsg(seriesdep_enumslist[seriesdep_enumindex])
+                [typepre,type_piece,type_array] = grabPieceArray(struct.fields[i].type)
                 s += "# ---" + ret
                 s += "# Enumerated type:" + ret
-                s += enumentriesstr
+                #s += enumentriesstr
+                if s.find("\n".join(enumentriesstr_linelist)) == True: # then we already added this enum to this .msg file, don't add it again
+                    pass
+                else: # need to check line-by-line to make sure this hasn't been added before
+                    for singleline in enumentriesstr_linelist:
+                        if s.find(str(singleline)) != -1: # then we already added this line to this .msg file, don't add it again
+                            s += "# " + singleline + ret # not leaving it out entirely, commenting it out!!
+                            #if (str(struct.name) == 'LoiterAction'):
+                            #    print("DEBUG: Commented '%s'" % singleline)
+                        else:
+                            s += singleline + ret
+                            #if (str(struct.name) == 'LoiterAction'):
+                            #    print("DEBUG: Added '%s'" % singleline)
                 s += "# ---" + ret
                 s += enumtype + type_array + " " + struct.fields[i].name
-            else:
+            else: # then need to list the 'correct_series_pkg_msgs/datatype' here
                 # need to give correct Series before type
                 if (struct.fields[i].series != None) and (struct.fields[i].series != ""): # ...this should be enough, have to give remote series # for ROS msgs, don't have to write local pkg type, but is a good idea
                     #print("otherstruct in different _msgs")
@@ -789,8 +1027,5 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,structs_list,e
     out.close()
     
     return [s,dependencies]
-
-def to_rosmsg_comment(comment, indent):
-    return str(indent + ('\n' + indent + '--').join(textwrap.wrap('--' + comment))) + '\n'
 
 main()
