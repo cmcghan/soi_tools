@@ -22,11 +22,12 @@ class Connection:
         return self.name + " : port " + self.src_name + "." + self.src_field_name + " -> " + self.dest_name + "." + self.dst_field_name + ";"
 
 class Component_Type:
-    def __init__(self, name):
+    def __init__(self, name, extends):
         self.name = name
         self.inputs = set([])
         self.outputs =set([])
         self.comment = None
+        self.extends = extends
 
     def __str__(self):
         s = self.name + ': \n'
@@ -84,6 +85,7 @@ def main():
     i = open(in_file, 'r')
 
     cts = parse(i)
+    add_extensions(cts)
 
     conns = connections(cts)
     for ct in cts:
@@ -92,6 +94,16 @@ def main():
         out.write(str(c) + '\n')
     i.close()
     out.close()
+
+def add_extensions(cts):
+    for ct in cts:
+        if ct.extends is not None:
+            for exct in cts:
+                if exct.name == ct.extends:
+                    for i in exct.inputs:
+                        ct.inputs.add(Field(i.name, i.type, i.is_input))
+                    for i in exct.outputs:
+                        ct.outputs.add(Field(i.name, i.type, i.is_input))
 
 def connections(cts):
     conns = []
@@ -138,9 +150,15 @@ def parse(pipe):
     cts =[]
     for line in pipe.readlines():
         line = line.rstrip()
+        line = strip_whitespace(line)
         if line.startswith("process"):
-            name = line.split()[1]
-            ct = Component_Type(name)
+            splits = line.split()
+            name = splits[1]
+            extends = None
+            if "extends" in line:
+                extends = splits[3];
+
+            ct = Component_Type(name, extends)
         if "in event" in line:
             ct.inputs.add(parse_feature(line))
         if "out event" in line:
