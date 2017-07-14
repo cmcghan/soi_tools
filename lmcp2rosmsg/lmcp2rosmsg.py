@@ -12,7 +12,12 @@
 # for lxml, should be installed (except slt), but can install: (see: http://lxml.de/installation.html )
 # sudo apt-get install libxml2-dev libxslt-dev python-dev
 
-""" .msg files create + catkin_make okay! example calls:
+"""
+
+*** NOTE THAT THERE IS A BIG PROBLEM HERE CURRENTLY, IN THAT LmcpGen IS
+DYNAMIC MESSAGING AND CURRENTLY ROS ONLY SUPPORTS STATIC MESSAGING!! ***
+
+.msg files create + catkin_make okay! example calls:
 -- downloaded to ~/github_pulls
 as in, 'mkdir -p ~/github_pulls && cd ~/github_pulls && git clone https://github.com/cmcghan/soi_tools.git
 then, 'cd ~/github_pulls/soi_tools/lmcp2rosmsg'
@@ -27,9 +32,9 @@ then, can call via:
 as, in, ~/github_pulls/soi_tools/lmcp2rosmsg/catkin_lmcp/src
 -- make this an actual workspace via:
 'cd ~/github_pulls/soi_tools/lmcp2rosmsg/catkin_lmcp/src; catkin_init_workspace; cd ..; catkin_make'
-"""
 
-""" main() function is the starting point
+
+main() function is the starting point
 -- handle_all_files() figures out all the dependencies and then reads in and handles each mdms XML file in order
 ---- read_XML_MDMs_file_and_output_to_file() is called upon by this (in a for loop) and calls the file read-in stuff to grab the XML content in a usable form (via parse_XML(), storing it in an XMLCollector_rosmsg class) and then calls struct_to_rosmsg() in turn
 
@@ -1028,4 +1033,5 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,pre_dir,struct
     
     return [s,dependencies]
 
-main()
+if __name__ == "__main__":
+    main()
