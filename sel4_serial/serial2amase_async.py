@@ -6,8 +6,8 @@ import signal
 import sys
 import asyncore
 
-sock_buf_size = 50
-uart_buf_size = 50
+sock_buf_size = 1000
+uart_buf_size = 1000
 
 class Looper(asyncore.dispatcher):
 
@@ -17,6 +17,7 @@ class Looper(asyncore.dispatcher):
         self.connect((host,port))
         self.ser = ser
         self.uart_buf = ""
+        self.index = 0
 
     def handle_connect(self):
         pass
@@ -35,7 +36,6 @@ class Looper(asyncore.dispatcher):
 
     def handle_write(self):
         sent = self.send(self.uart_buf)
-        sys.stdout.flush()
         self.uart_buf = self.uart_buf[sent:]
         pass
 
