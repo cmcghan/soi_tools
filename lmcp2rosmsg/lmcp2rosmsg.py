@@ -395,9 +395,16 @@ def indexLocalEnumType(type,enums_list):
 #    return boolAns
 
 # get_struct_deps() is modified from struct_to_rosmsg (removes unnecessary additional computation)
-def get_struct_deps(struct,MDMseriesName,MDMnamespace,enums_list,dependencies=[]):
+def get_struct_deps(struct,MDMseriesName,MDMnamespace,enums_list,dependencies=[],extendersby={}):
     # struct.{name,extends,series,comment,fields}
     # fields.{name,comment,type,defaultVal,units}
+    #
+    # extendersby is used to add info to comments in the .msg files for each struct and fieldtype that is listed in the dictionary / allows for downcasting!
+    
+    
+    str_rosseries_and_name = str(str(MDMseriesName).lower() + '_msgs/' + struct.name)
+    if not (str_rosseries_and_name in extendersby.keys()): # if not in dict then create new key for it with blank entry
+        extendersby[str_rosseries_and_name] = [ ] # (that way, every struct gets an entry :)
     
     # get dependencies in struct if has an extends
     if struct.extends != None:
@@ -406,6 +413,19 @@ def get_struct_deps(struct,MDMseriesName,MDMnamespace,enums_list,dependencies=[]
         #
         # find other struct
         if struct.series == None or str(struct.series) == "" or str(struct.series).lower() == str(MDMseriesName).lower(): # then in this series (same MDM file)
+            str_rosseries_and_name = str(str(MDMseriesName).lower() + '_msgs/' + struct.name)
+            str_extendsseries_and_name = str(str(MDMseriesName).lower() + '_msgs/' + struct.extends)
+            if not (str_extendsseries_and_name in extendersby.keys()): # if not in dict then create new key and add to the list
+                extendersby[str_extendsseries_and_name] = [ str_rosseries_and_name ]
+            else: # if in dict
+                if str_rosseries_and_name not in extendersby[str_extendsseries_and_name]: # if not already in the key's value list
+                    holdlist = extendersby[str_extendsseries_and_name] # add to value list
+                    holdlist.append( str_rosseries_and_name )
+                    #extendersby[str_extendsseries_and_name] = holdlist
+                    extendersby.update( {str_extendsseries_and_name: holdlist} )
+                else:
+                    pass # already in there, nothing to do (should never get here unless there's some bad/broken dual-naming thing going on)
+
             # (1) find and grab from other struct if in this series
             # other struct will show an external dependency when we get to it, will be added then
             # we only really care about global pkg deps per-XML MDMs file
@@ -420,6 +440,21 @@ def get_struct_deps(struct,MDMseriesName,MDMnamespace,enums_list,dependencies=[]
             if not(dep in dependencies):
                 dependencies.append(dep)
             #print("dependencies for %s %s: %r" % (rospkgname,struct.name,dependencies))
+
+            str_rosseries_and_name = str(str(MDMseriesName).lower() + '_msgs/' + struct.name)
+            str_extendsseries_and_name = str(dep + '/' + struct.extends)
+            if not (str_extendsseries_and_name in extendersby.keys()): # if not in dict then create new key and add to the list
+                extendersby[str_extendsseries_and_name] = [ str_rosseries_and_name ]
+            else: # if in dict
+                if not (str_rosseries_and_name in extendersby[str_extendsseries_and_name]): # if not already in the key's value list
+                    holdlist = extendersby[str_extendsseries_and_name] # add to value list
+                    holdlist.append( str_rosseries_and_name )
+                    #extendersby[str_extendsseries_and_name] = holdlist
+                    extendersby.update( {str_extendsseries_and_name: holdlist} )
+                else:
+                    pass # already in there, nothing to do (should never get here unless there's some bad/broken dual-naming thing going on)
+    else: # doesn't extend anything
+        pass
 
     # get dependencies in fields
     for i in range(len(struct.fields)):
@@ -440,16 +475,16 @@ def get_struct_deps(struct,MDMseriesName,MDMnamespace,enums_list,dependencies=[]
         else:
             pass
 
-    return dependencies # None is returned if there is a problem, [] is returned if no external deps
+    return [dependencies,extendersby] # None is returned if there is a problem, [] is returned if no external deps
 
-def get_all_xml_file_deps(MDMseriesName,MDMnamespace,structs_list,enums_list):
+def get_all_xml_file_deps(MDMseriesName,MDMnamespace,structs_list,enums_list,extendersby={}):
     dependencies = []
     for s in structs_list:
-        dependencies = get_struct_deps(s,MDMseriesName,MDMnamespace,enums_list,dependencies)
+        [dependencies,extendersby] = get_struct_deps(s,MDMseriesName,MDMnamespace,enums_list,dependencies,extendersby)
         if dependencies is None:
             print("DEBUG: problem with finding dependencies for %s!"  % s.name)
             return None
-    return dependencies
+    return [dependencies,extendersby]
 
 def handle_all_files(xmldirstr):
     # get all XML MDM filenames+paths together
@@ -465,12 +500,16 @@ def handle_all_files(xmldirstr):
     # now that we have every XML MDMs file in a list...
     # figure out what dependencies they have on each other
     unordered_list = []
+    extendersby = {}
     for filename in matches_found:
         c = parse_XML(filename) # c as in collector
-        dependencies = get_all_xml_file_deps(c.MDMseriesName,c.MDMnamespace,c.structs,c.enums)
+        [dependencies,extendersby] = get_all_xml_file_deps(c.MDMseriesName,c.MDMnamespace,c.structs,c.enums,extendersby)
         if dependencies == None:
             sys.exit(0)
         unordered_list.append([filename,str(c.MDMseriesName).lower() + "_msgs",dependencies])
+    
+    # dependencies and extendersby should both be completely filled in, now
+    print("DEBUG: extendersby = %r" % extendersby)
     
     # then get them 'sorted' in the order in which dependencies need to be handled
     i = 0
@@ -540,7 +579,7 @@ def handle_all_files(xmldirstr):
     for i in range(len(sorted_list)):
         #print("---\nDealing with %s..." % sorted_list[i][0])
         in_file = sorted_list[i][0]
-        read_XML_MDMs_file_and_output_to_file(in_file,None,pkg_structdata_dict) # out_file = None
+        read_XML_MDMs_file_and_output_to_file(in_file,None,pkg_structdata_dict,extendersby) # out_file = None
         #print("Done dealing with %s...\n---" % sorted_list[i][0])
     # after this, should be done!
 
@@ -548,7 +587,7 @@ def main():
     #parse all of the arguments
     ap = AP.ArgumentParser(description='Converts an LMCP xml file into AADL datatypes')
     ap.add_argument('runtype', metavar='runoption', type=str, choices=["file","dir"], help='the option "dir" or "file" that decides the run (dir for directory as input_file)')
-    ap.add_argument('input_file', metavar='input', type=str, help='the input LMCP xml file')
+    ap.add_argument('input_file', metavar='input', type=str, help='the input LMCP xml file if runtype is "file", the directory holding the LMCP xml files if runtype is "dir" (e.g, "/home/username/UxAS_pulls/OpenUxAS/mdms")')
     ap.add_argument('output_file', metavar='output', type=str, nargs='?', default=None, help='the output AADL file')
 
     args = ap.parse_args()
@@ -612,7 +651,7 @@ def found_unsafe_inputs_in_str(str_to_check):
     return status
 
 
-def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None,pkg_structdata_dict=None):
+def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None,pkg_structdata_dict=None,extendersby=None): # *** TODO: if extendersby is not None, add info to comments in the file for each struct and fieldtype that is listed in the extendersby dictionary!!! ***
     if in_file is None:
         print("Input filename not given. Exiting.")
         sys.exit(1)
@@ -664,7 +703,7 @@ def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None,pkg_structdata_d
         sys.exit(1)
     
     # make CMakeLists.txt and package.xml that is correct for the catkin pkg
-    dependencies = get_all_xml_file_deps(collector.MDMseriesName,collector.MDMnamespace,collector.structs,collector.enums)
+    [dependencies,holdsingle_extendersby] = get_all_xml_file_deps(collector.MDMseriesName,collector.MDMnamespace,collector.structs,collector.enums)#,{})
     pkgmsgstr = str(str(collector.MDMseriesName).lower()+"_msgs")
     pkgdepsstr = " ".join(dependencies)
     pkgdepstofilestr = "\n  ".join(dependencies)
@@ -763,7 +802,7 @@ def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None,pkg_structdata_d
         print("Unsafe MDMnamespace string '%s' or unsafe dependencies '%s' or directory '%s' created from file=%s. Exiting before run." % (pkgmsgstr,pkgdepsstr,rospkgname,in_file))
         sys.exit(1)
     
-    print("Beginning .msg file creation for %s_msg..." % str(collector.MDMseriesName).lower())
+    print("Beginning .msg file(s) creation for %s_msg..." % str(collector.MDMseriesName).lower())
     
     # use collector.MDMcomment for short README.txt document in repo:
     readme_str = "##Series Name\n" + str(collector.MDMseriesName) + '\n'
@@ -781,7 +820,7 @@ def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None,pkg_structdata_d
         out = open(out_file,'w')
     # output filenames for each struct is determined from collector.structs.name, collector.structs.series
     for s in collector.structs: # struct_to_rosmsg will internally write to individual files, but below line...
-        [structstr,dependencies] = struct_to_rosmsg(s,collector.MDMseriesName,collector.MDMnamespace,rospkgname,pre_dir,collector.structs,collector.enums,pkg_structdata_dict)
+        [structstr,specificdependencies] = struct_to_rosmsg(s,collector.MDMseriesName,collector.MDMnamespace,rospkgname,pre_dir,collector.structs,collector.enums,pkg_structdata_dict,[],extendersby) # ...we don't give it the package "dependencies" here -- struct_to_rosmsg() is internally calculating specific per-struct dependencies
         if out_file is not None:
             out.write(structstr) # ...(also) writes to full file
             out.write("\n")
@@ -789,17 +828,17 @@ def read_XML_MDMs_file_and_output_to_file(in_file,out_file=None,pkg_structdata_d
             out.write("# ----------------------------------------\n")
             out.write("# ----------------------------------------\n")
             out.write("\n")
-        #if dependencies != []:
-        #    print("%s/%s has external dependencies: %r" % (rospkgname,str(s.name),dependencies))
+        #if specificdependencies != []:
+        #    print("%s/%s has external dependencies: %r" % (rospkgname,str(s.name),specificdependencies))
     
     if out_file is not None:
         out.close()
         
-    print(".msg file creation for %s_msg completed!" % str(collector.MDMseriesName).lower())
+    print(".msg file(s) creation for %s_msg completed!" % str(collector.MDMseriesName).lower())
 
 # see also: http://answers.ros.org/question/9427/enum-in-msg/
 # and: http://wiki.ros.org/msg#Constants
-def enum_to_rosmsg(enum):
+def enum_to_rosmsg_piece(enum):
     #
     # note: we are going to have to handle all the enums first, because
     # they need to be written into the corresponding .msg files at-need
@@ -861,8 +900,54 @@ def find_local_pkg_path(dirname_to_find,dir_to_look_in='./'):
         print("DEBUG: error, found multiple subpackages for '%s'! (%r)" % (dirname_to_find,matches_found))
         return ""
 
+def get_extendsby_strings_for_rosmsg_piece(extendersby,seriesName,typename): # seriesName,typename is expected to be either MDMseriesName,struct.name or struct.fields[i].series,struct.fields[i].type
+    exby_str = ""
+    ret = "\n"
+    
+    # just in case, get rid of potential array piece
+    [typepre,type_piece,type_array] = grabPieceArray(typename) # struct.fields[i].type)
+    typename = type_piece
+    
+    if extendersby != None:
+        str_rosseries_and_name = str(str(seriesName).lower() + '_msgs/' + typename)
+        if not (str_rosseries_and_name in extendersby.keys()):
+            print("DEBUG: issue, every struct key should have a pair!! %r" % str_rosseries_and_name)
+        else:
+            if len(extendersby[str_rosseries_and_name]) == 0: # nothing uses this in an 'extend'
+                exby_str += "# Extended by: (n/a, no children)" + ret
+            else: # write out all things extending this / extended by...
+                # set up the list of things and go through figuring out what need to add?
+                # -- no, this is unnecessary, there should be no loops
+                holdlist = extendersby[str_rosseries_and_name]
+                exby_str += "# Extended by: " + holdlist[0]
+                i = 1
+                while i < len(holdlist):
+                    exby_str += ", " + holdlist[i]
+                    i = i+1
+                exby_str += ret
+                
+                childrenlist = []
+                while len(holdlist) > 0:
+                    single_extender = holdlist[0]
+                    if not (single_extender in childrenlist):
+                        childrenlist.append([single_extender, extendersby[single_extender] ])
+                    holdlist = holdlist[1:len(holdlist)]
+                    holdlist = holdlist + extendersby[single_extender] # add more entries to back of list, [] will change nothing (no error)
+                # print out all sub-children and sub-subchildren, etc.
+                for j in range(len(childrenlist)):
+                    if len(childrenlist[j][1]) == 0: # nothing uses this in an 'extend'
+                        exby_str += "# Child " + childrenlist[j][0] + " extended by: (n/a, no children)" + ret
+                    else: #if len(childrenlist[j][1]) > 1: # then this has children of its own to print out
+                        exby_str += "# Child " + childrenlist[j][0] + " extended by: " + childrenlist[j][1][0]
+                        i = 1
+                        while i < len(childrenlist[j][1]):
+                            exby_str += ", " + childrenlist[j][1][i]
+                            i = i+1
+                        exby_str += ret
+    return exby_str
+
 # see also: http://docs.ros.org/kinetic/api/calibration_msgs/html/msg/JointStateCalibrationPattern.html
-def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,pre_dir,structs_list,enums_list,pkg_structdata_dict=None,dependencies=[],level=0):
+def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,pre_dir,structs_list,enums_list,pkg_structdata_dict=None,dependencies=[],extendersby=None,level=0):
     #
     # note: "extends" is making a new class with ': public extended_class',
     # so the data names and datatypes are handled at the same level in UxAS
@@ -912,7 +997,12 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,pre_dir,struct
     s = "# Struct: " + struct.name + ret
     if struct.comment != None:
         s += "# " + struct.comment.replace("\n","\n# ") + ret
-    if struct.extends != None:
+    
+    s += get_extendsby_strings_for_rosmsg_piece(extendersby,MDMseriesName,struct.name) # "struct" slot here only needs ".name" part
+    
+    if struct.extends is None:
+        s += "# Extends: (n/a, no parents)" + ret
+    else: #if struct.extends != None:
         #s += ret
         if struct.series != None:
             s += "# Extends: " + str(struct.series).lower() + "_msgs/" + struct.extends + ret
@@ -933,7 +1023,7 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,pre_dir,struct
                 # get index
                 ii = holdit_local_names.index(struct.extends)
                 # get file contents; yes, this can get us into trouble if we go down too many levels
-                [extendsstr,dependencies] = struct_to_rosmsg(structs_list[ii],MDMseriesName,MDMnamespace,rospkgname,pre_dir,structs_list,enums_list,pkg_structdata_dict,dependencies,level+1)
+                [extendsstr,dependencies] = struct_to_rosmsg(structs_list[ii],MDMseriesName,MDMnamespace,rospkgname,pre_dir,structs_list,enums_list,pkg_structdata_dict,dependencies,extendersby,level+1)
                 if extendsstr == "":
                     print("Trace: %r , name: %s, extends: %s" % (level,struct.name,struct.extends))
                     return ["",dependencies]
@@ -985,9 +1075,9 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,pre_dir,struct
             #print("type '%s', enumindex = %d" % (struct.fields[i].type,enumindex))
             if enumindex != -1 or seriesdep_enumindex != -1: # then need to grab and add enum here
                 if enumindex != -1:
-                    [enumentriesstr_linelist,enumtype] = enum_to_rosmsg(enums_list[enumindex])
+                    [enumentriesstr_linelist,enumtype] = enum_to_rosmsg_piece(enums_list[enumindex])
                 if seriesdep_enumindex != -1:
-                    [enumentriesstr_linelist,enumtype] = enum_to_rosmsg(seriesdep_enumslist[seriesdep_enumindex])
+                    [enumentriesstr_linelist,enumtype] = enum_to_rosmsg_piece(seriesdep_enumslist[seriesdep_enumindex])
                 [typepre,type_piece,type_array] = grabPieceArray(struct.fields[i].type)
                 s += "# ---" + ret
                 s += "# Enumerated type:" + ret
@@ -1007,6 +1097,17 @@ def struct_to_rosmsg(struct,MDMseriesName,MDMnamespace,rospkgname,pre_dir,struct
                 s += "# ---" + ret
                 s += enumtype + type_array + " " + struct.fields[i].name
             else: # then need to list the 'correct_series_pkg_msgs/datatype' here
+                
+                # first print all deps for the fieldseries/field
+                if (struct.fields[i].series != None) and (struct.fields[i].series != ""): # ...this should be enough, have to give remote series # for ROS msgs, don't have to write local pkg type, but is a good idea
+                    fieldseriesName = struct.fields[i].series
+                else: # assuming is inside current local set... probably a good assumption
+                    #print("otherstruct in same series")
+                    #s += rospkgname + "/"
+                    fieldseriesName = MDMseriesName
+                #print("DEBUG: (rospkgname,struct.name) = (%r,%r)" % (rospkgname, str(struct.name)) )
+                s += get_extendsby_strings_for_rosmsg_piece(extendersby,fieldseriesName,str(struct.fields[i].type)) # "struct" slot here only needs ".name" part
+
                 # need to give correct Series before type
                 if (struct.fields[i].series != None) and (struct.fields[i].series != ""): # ...this should be enough, have to give remote series # for ROS msgs, don't have to write local pkg type, but is a good idea
                     #print("otherstruct in different _msgs")
