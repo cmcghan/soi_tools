@@ -6,7 +6,7 @@ import signal
 import sys
 import asyncore
 
-sock_buf_size = 1000
+sock_buf_size = 1000000
 uart_buf_size = 1000
 
 class Looper(asyncore.dispatcher):
@@ -39,7 +39,8 @@ class Looper(asyncore.dispatcher):
         self.uart_buf = self.uart_buf[sent:]
         pass
 
-ser = serial.Serial('/dev/ttyUSB0', 57600, timeout=1)
+ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
 loop = Looper("127.0.0.1", 5555, ser)
 
-asyncore.loop(timeout=0.5)
+#asyncore.loop(timeout=0.1)
+asyncore.loop()

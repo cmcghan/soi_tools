@@ -16,7 +16,7 @@ s.connect(("127.0.0.1", 5555))
 signal.signal(signal.SIGINT, signal_handler)
 
 numBytes = 0
-with serial.Serial('/dev/ttyUSB0', 57600, timeout=100) as ser:
+with serial.Serial('/dev/ttyUSB2', 57600, timeout=100) as ser:
     while True:
         c = ser.read();
         numBytes += 1
