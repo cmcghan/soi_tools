@@ -608,6 +608,43 @@ def main():
         sys.exit(1)
 
     if runtype == "dir": # chaining multiple things together
+        print("Getting 'initial' ROS .msg stuff handled {'datatype': , 'datastring': }...")
+        UxASxmlSeries = "UXAS_REQUIRED"
+        UxASxmlStruct = "DatatypeDatastring"
+        UxASxmlROSpkgType = UxASxmlSeries.lower()+ '_msgs/' + UxASxmlStruct
+        UxASxmlString = """<?xml version="1.0" encoding="UTF-8"?>
+                           <!DOCTYPE MDM SYSTEM 'MDM.DTD'>
+                           
+                           <!--
+                           # $ROSPKG+TYPE$ is a...
+                           # Basic structure for all typed data coming from UxAS as JSON-dict converted LmcpGen messages
+                           #string datatype
+                           #string datastring
+                           -->
+                           <MDM>
+                               <SeriesName>$SERIES$</SeriesName>
+                               <Namespace>ros/uxasjson</Namespace>
+                               <Version>3</Version>
+                               <StructList>
+
+                                   <!-- Base class for all straight-send JSON-dict messages from UxAS currently -->
+                                   <Struct Name="$STRUCT$">
+                                       <!-- A string containing the Series/Struct name (type / format of object) of the UxAS data being sent -->
+                                       <Field Name="datatype" Type="string"/>
+                                       <!-- A string containing the dictionary-format of UxAS object values for the datatype -->
+                                       <Field Name="datastring" Type="string"/>
+                                   </Struct>
+                                
+                               </StructList>
+                           </MDM>"""
+        UxASxmlString = UxASxmlString.replace("$SERIES$", UxASxmlSeries)
+        UxASxmlString = UxASxmlString.replace("$STRUCT$", UxASxmlStruct)
+        UxASxmlString = UxASxmlString.replace("$ROSPKG+TYPE$", UxASxmlROSpkgType)
+        outfileToWriteName = UxASxmlSeries + ".xml"
+        outfile_toWrite = open(outfileToWriteName,'w')
+        outfile_toWrite.write(UxASxmlString)
+        outfile_toWrite.close()
+        read_XML_MDMs_file_and_output_to_file(outfileToWriteName,out_file=None,pkg_structdata_dict=None,extendersby={UxASxmlROSpkgType: []})
         print("running over entire directory of xml files...")
         handle_all_files(in_file) # (xmldirstr)
     elif runtype == "file": # old/original way to do it

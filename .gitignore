@@ -3,3 +3,4 @@
 .DS_Store
 *.bak
 lmcp2rosmsg/catkin_lmcp/*
+catkin_lmcp/*
