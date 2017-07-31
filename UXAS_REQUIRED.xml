@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+                           <!DOCTYPE MDM SYSTEM 'MDM.DTD'>
+                           
+                           <!--
+                           # uxas_required_msgs/DatatypeDatastring is a...
+                           # Basic structure for all typed data coming from UxAS as JSON-dict converted LmcpGen messages
+                           #string datatype
+                           #string datastring
+                           -->
+                           <MDM>
+                               <SeriesName>UXAS_REQUIRED</SeriesName>
+                               <Namespace>ros/uxasjson</Namespace>
+                               <Version>3</Version>
+                               <StructList>
+
+                                   <!-- Base class for all straight-send JSON-dict messages from UxAS currently -->
+                                   <Struct Name="DatatypeDatastring">
+                                       <!-- A string containing the Series/Struct name (type / format of object) of the UxAS data being sent -->
+                                       <Field Name="datatype" Type="string"/>
+                                       <!-- A string containing the dictionary-format of UxAS object values for the datatype -->
+                                       <Field Name="datastring" Type="string"/>
+                                   </Struct>
+                                
+                               </StructList>
+                           </MDM>
